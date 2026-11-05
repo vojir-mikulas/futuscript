@@ -50,6 +50,8 @@ pub enum Node {
     Portal { target: Option<ExprId>, children: Vec<Node> },
     Local { name: Binding, ty: Option<(usize, usize)>, expr: ExprId },
     Head { children: Vec<Node> },
+    /// `(<layer>)` … `(<pending>)` … `(<catch> err )` … `(</layer>)`
+    Layer { body: Vec<Node>, pending: Option<Vec<Node>>, catch: Option<(Option<Binding>, Vec<Node>)> },
     Match { subject: ExprId, cases: Vec<(Option<ExprId>, Vec<Node>)> },
 }
 
@@ -81,8 +83,8 @@ const INSTRUCTIONS: &[&str] = &[
     "macro", "head", "window", "document", "portal", "procedureDone",
 ];
 
-const LATER_BLOCKS: &[(&str, &str)] = &[("layer", "ve fázi 2")];
-const LATER_SEPARATORS: &[&str] = &["pending", "catch"];
+const LATER_BLOCKS: &[(&str, &str)] = &[];
+const LATER_SEPARATORS: &[&str] = &[];
 
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
@@ -108,6 +110,12 @@ enum Frame {
     Macro { name: Binding, params: Option<(usize, usize)>, children: Vec<Node>, span: (usize, usize) },
     Portal { target: Option<ExprId>, children: Vec<Node>, span: (usize, usize) },
     Head { children: Vec<Node>, span: (usize, usize) },
+    Layer {
+        body: Vec<Node>,
+        pending: Option<Vec<Node>>,
+        catch: Option<(Option<Binding>, Vec<Node>)>,
+        span: (usize, usize),
+    },
     Match { subject: ExprId, cases: Vec<(Case, Vec<Node>)>, span: (usize, usize) },
     Later { name: String, children: Vec<Node> },
 }
@@ -187,6 +195,8 @@ impl Parser<'_, '_> {
                     .with_help("přidej (</portal>)"),
                 Frame::Head { span, .. } => Diagnostic::new("(<head>) není uzavřený", span.0, span.1)
                     .with_help("přidej (</head>)"),
+                Frame::Layer { span, .. } => Diagnostic::new("(<layer>) není uzavřená", span.0, span.1)
+                    .with_help("přidej (</layer>)"),
                 Frame::Match { span, .. } => Diagnostic::new("(<match>) není uzavřený", span.0, span.1)
                     .with_help("přidej (</match>)"),
                 Frame::Later { .. } | Frame::Root(_) => continue,
@@ -213,6 +223,9 @@ impl Parser<'_, '_> {
             | Frame::Macro { children: c, .. }
             | Frame::Portal { children: c, .. }
             | Frame::Head { children: c, .. }
+            | Frame::Layer { catch: Some((_, c)), .. }
+            | Frame::Layer { catch: None, pending: Some(c), .. }
+            | Frame::Layer { catch: None, pending: None, body: c, .. }
             | Frame::Later { children: c, .. } => c,
             Frame::Match { cases, .. } => &mut cases.last_mut().expect("match case").1,
             Frame::If { branches, .. } => &mut branches.last_mut().expect("if branch").1,
@@ -433,6 +446,45 @@ impl Parser<'_, '_> {
                 Some(Frame::Macro { name, params, children, .. }) => self.push(Node::Macro { name, params, children }),
                 Some(other) => {
                     let d = mismatch(&other, "(</macro>)", name_span);
+                    self.stack.push(other);
+                    self.fail(d);
+                }
+                None => unreachable!(),
+            },
+            (Kind::Open, "layer") => {
+                if !instr.args.is_empty() {
+                    self.diags.push(Diagnostic::new(
+                        "atributy vrstvy (heat, host, priorita) přijdou ve fázi 4",
+                        instr.args_start,
+                        instr.args_start + instr.args.len(),
+                    ));
+                }
+                self.stack.push(Frame::Layer { body: Vec::new(), pending: None, catch: None, span: name_span });
+            }
+            (Kind::Open, name @ ("pending" | "catch")) => {
+                let Some(Frame::Layer { pending, catch, .. }) = self.stack.last_mut() else {
+                    return self.diags.push(Diagnostic::new(format!("(<{name}>) patří do (<layer>)"), name_span.0, name_span.1));
+                };
+                if name == "pending" {
+                    if pending.is_some() || catch.is_some() {
+                        return self.diags.push(Diagnostic::new("(<pending>) musí být jednou a před (<catch>)", name_span.0, name_span.1));
+                    }
+                    *pending = Some(Vec::new());
+                } else {
+                    if catch.is_some() {
+                        return self.diags.push(Diagnostic::new("(<catch>) už ve vrstvě je", name_span.0, name_span.1));
+                    }
+                    let err = (!instr.args.is_empty()).then(|| Binding { name: instr.args.to_string(), pos: instr.args_start });
+                    if err.as_ref().is_some_and(|b| !is_ident(&b.name)) {
+                        return self.diags.push(Diagnostic::new("(<catch>) bere jen jméno chyby", name_span.0, name_span.1).with_help("(<catch> err )"));
+                    }
+                    *catch = Some((err, Vec::new()));
+                }
+            }
+            (Kind::Close, "layer") => match self.stack.pop() {
+                Some(Frame::Layer { body, pending, catch, .. }) => self.push(Node::Layer { body, pending, catch }),
+                Some(other) => {
+                    let d = mismatch(&other, "(</layer>)", name_span);
                     self.stack.push(other);
                     self.fail(d);
                 }
@@ -858,6 +910,8 @@ fn mismatch(open: &Frame, found: &str, at: (usize, usize)) -> Diagnostic {
             .with_help(format!("přidej (</portal>) před {found}")),
         Frame::Head { span, .. } => Diagnostic::new("(<head>) není uzavřený", span.0, span.1)
             .with_help(format!("přidej (</head>) před {found}")),
+        Frame::Layer { span, .. } => Diagnostic::new("(<layer>) není uzavřená", span.0, span.1)
+            .with_help(format!("přidej (</layer>) před {found}")),
         Frame::Match { span, .. } => Diagnostic::new("(<match>) není uzavřený", span.0, span.1)
             .with_help(format!("přidej (</match>) před {found}")),
         Frame::Later { name, .. } => Diagnostic::new(format!("tady čekám (</{name}>), ne {found}"), at.0, at.1),
@@ -1191,6 +1245,25 @@ fn project_nodes(nodes: &[Node], t: &Template, src: &str, p: &mut Projection, ou
                     p.src(&src[*s..*e], *s);
                 }
                 emit(*expr, " = (", "\n);\n", t, src, p, out);
+            }
+            Node::Layer { body, pending, catch } => {
+                p.r#gen("{\n", 0);
+                project_nodes(body, t, src, p, out);
+                p.r#gen("}\n{\n", 0);
+                if let Some(pending) = pending {
+                    project_nodes(pending, t, src, p, out);
+                }
+                p.r#gen("}\n", 0);
+                if let Some((err, children)) = catch {
+                    p.r#gen("((", 0);
+                    if let Some(b) = err {
+                        p.src(&b.name, b.pos);
+                        p.r#gen(": any", b.pos);
+                    }
+                    p.r#gen(") => {\n", 0);
+                    project_nodes(children, t, src, p, out);
+                    p.r#gen("});\n", 0);
+                }
             }
             Node::Head { children } => {
                 p.r#gen("{\n", 0);

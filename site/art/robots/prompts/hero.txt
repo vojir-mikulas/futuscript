@@ -1,14 +1,19 @@
 Use your image generation tool to create ONE image, then save it as a PNG file at exactly this path:
-site/art/robots-v2/hero.png
+site/art/robots-v7/hero.png
 
-Character: an ORIGINAL robot mascot for a web framework where web pages get 3D printed. It must be an original design, not any existing cartoon robot. Personality: cocky, sarcastic, street-smart, a bit lazy, NOT cute and NOT childlike.
+The attached image is our own original character "Printer Printer Escuella". Redraw the SAME character with exactly these changes to the face:
 
-Design: tall and lanky adult proportions (small head relative to body, long limbs). Body is an old industrial machine built out of a 3D printer: a tall slightly tapered steel torso with rivets, small dents and worn olive-green and brass paint chips; a round window on the chest showing a spool of mint-green filament inside; long flexible ribbed hose arms ending in three-finger mechanical grippers; thin piston legs with heavy boot-like feet. Head is a squat trapezoid box with a brass 3D-printer hotend nozzle sticking out of the top like a chimney, two mismatched round camera-lens eyes (one slightly larger) with half-closed metal eyelids giving a smug, unimpressed look, and a horizontal speaker-grille mouth curled into a smirk.
+1. Mouth: a FIXED, rigid horizontal speaker grille (a small rounded rectangle with four horizontal slats) that never changes shape. It does not smile or frown; it is a static part of the head.
+2. Eyes: two SEPARATE short cylindrical lens tubes that stick out a little from the face, like two tiny telescopes or camera lenses, each in a brass ring, one slightly bigger than the other. Each tube has a black pupil and metal shutter eyelids (top and bottom) that can close partially. The eyes carry ALL the emotion through eyelid shape, pupil size and gaze direction. The two eyes are NOT joined in a single visor band.
+3. Remove the eyebrow plates.
+Expression for this image: smug, self-satisfied: top shutter-lids half closed and slightly tilted, pupils looking sideways at the viewer.
 
-Art style: 2D cartoon like a classic American adult animated sci-fi sitcom: thick even dark outlines, flat colors with one shadow tone, slightly exaggerated but grounded proportions, retro-futuristic. Not 3D render, no text, no letters, no logos.
+Keep everything else the same: small rounded-box olive-green head, straight thin rigid antenna rod ending in a tiny brass nozzle cone, boxy square olive-green torso with rounded corners, brass shoulder caps, brass waist band and a round brass-rimmed porthole with a mint-green filament spool, short ribbed neck, dark olive accordion-tube arms and legs, olive mitten hands, chunky olive boots with brass soles and ankle bolts, normal average build about 5 heads tall.
 
-Pose for this image: leaning back casually with weight on one leg, one gripper holding a freshly printed sheet of paper (a tiny web page layout) with a wisp of steam, the other gripper resting on the hip, smug grin.
+Art style: clean frame from a classic early-2000s American prime-time animated sci-fi sitcom: simple geometric shapes, flat fills, one lighter highlight band on metal, uniform thin dark outline, almost no small details, no textures. It must stay ORIGINAL: no visor band across the eyes, no grid of teeth, no cylindrical head, no door on the chest, no grey-blue body.
 
-Background: fully TRANSPARENT (alpha), no ground, no frame. Square 1024x1024, character centered with padding.
+Pose: full body, three-quarter view, the character FACES THE LEFT side of the image, standing with a cocky slouch, one hand on the hip, the other holding up a freshly printed sheet of paper (a tiny web page layout) with a small wisp of steam coming off the paper.
+
+No text, no letters, no numbers, no logos. Background fully TRANSPARENT (alpha), no ground, no frame. Square 1024x1024, character centered with padding.
 
 Save only the final image to the path above. Do not modify any other files.

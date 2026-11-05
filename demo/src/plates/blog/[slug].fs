@@ -1,5 +1,8 @@
 (<extruderInitialization>)
+  import { notFound } from "@futuscript/firmware"
+
   M98 params: { slug: string }
+  if (!["kytara", "tryska"].includes(params.slug)) notFound()
   M104 likes = 0
 
   export const entries = () => [{ slug: "kytara" }, { slug: "tryska" }]

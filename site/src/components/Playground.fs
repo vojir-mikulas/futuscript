@@ -1,24 +1,22 @@
 (<extruderInitialization>)
-  import robot from "../assets/robots/playground.webp"
   import CodeBlock from "./CodeBlock.fs"
-  import Nozzle from "./Nozzle.fs"
-  import source from "./Nozzle.fs?raw"
+  import Printer from "./Printer.fs"
+  import source from "./Printer.fs?raw"
 (</extruderInitialization>)
 
 (<extrusion>)
   <section class="section" id="playground">
     <div class="wrap">
-      <p class="eyebrow"><b>04</b> Playground</p>
+      <p class="eyebrow">Playground</p>
       <div class="head">
         <h2 class="title">This is not a screenshot. <span>It's printing right now.</span></h2>
-        <p class="intro">On the left is the real Nozzle.fs from this site's source. On the right, the Firmware is rendering it in your browser. Try overheating the nozzle. Printer would.</p>
-        <img class="robot" src={robot} alt="" />
+        <p class="intro">On the left, all of Printer.fs. On the right, that same file running: it's copying a guitar from one photo, a layer at a time. Try overheating it. Printer would.</p>
       </div>
       <div class="split">
-        <div class="source"><CodeBlock code={source.trim()} file="site/src/components/Nozzle.fs" /></div>
+        <div class="source"><CodeBlock code={source.trim()} file="site/src/components/Printer.fs" /></div>
         <div class="live">
-          <p class="tag"><i></i> Live</p>
-          <Nozzle />
+          <p class="tag"><i></i> Live · guitar.gcode</p>
+          <Printer />
         </div>
       </div>
     </div>
@@ -29,18 +27,15 @@
   .split {
     display: grid;
     grid-template-columns: 1.35fr 1fr;
-    align-items: start;
     gap: 24px;
   }
   .source {
     min-width: 0;
-    max-height: 560px;
+    contain: size;
     overflow-y: auto;
     border-bottom: 1px solid var(--hairline);
   }
   .live {
-    position: sticky;
-    top: calc(var(--header) + 24px);
     padding: 28px;
     background: var(--surface);
     border: 1px solid var(--hairline);
@@ -65,6 +60,10 @@
   @media (max-width: 900px) {
     .split {
       grid-template-columns: minmax(0, 1fr);
+    }
+    .source {
+      contain: none;
+      max-height: 560px;
     }
   }
 (</filament>)

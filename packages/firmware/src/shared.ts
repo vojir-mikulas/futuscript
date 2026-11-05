@@ -68,3 +68,12 @@ export function rest(all: Record<string, unknown>, exclude: string[]): Record<st
 }
 
 export type Model<P = Record<string, unknown>, Into = any> = (props: P, into: Into) => void
+
+export interface Interrupt {
+  futuscript: "redirect" | "notFound"
+  to?: string
+  status?: number
+}
+
+export const isInterrupt = (e: unknown): e is Interrupt =>
+  typeof e === "object" && e !== null && "futuscript" in e

@@ -5,6 +5,7 @@ import {
   flushMount,
   getOwner,
   onCleanup,
+  provide,
   root,
   runWithOwner,
   signal,
@@ -14,6 +15,15 @@ import {
   type Signal,
 } from "./reactive.ts"
 import { RENDER, clsx, isRenderable, styleText, toText, type Model } from "./shared.ts"
+import {
+  LayerCtx,
+  hydrationLayer,
+  nextLayerId,
+  resource as makeResource,
+  setHydrationData,
+  type ClientLayer,
+  type Rpc,
+} from "./data.ts"
 
 export const frag = (): DocumentFragment => document.createDocumentFragment()
 const marker = (): Comment => document.createComment("")
@@ -157,11 +167,31 @@ export function insert(parent: Node, get: () => unknown): void {
   })
 }
 
+const enhanced = new WeakSet<Element>()
+
 export function attr(node: Element, name: string, get: () => unknown): void {
   effect(() => {
     const v = get()
+    if (name === "action" && typeof v === "function" && (v as Rpc).url) return formAction(node as HTMLFormElement, v as Rpc)
     setAttr(node, name, v)
   })
+}
+
+function formAction(form: HTMLFormElement, fn: Rpc) {
+  form.setAttribute("action", fn.url)
+  form.setAttribute("method", "post")
+  ;(form as unknown as { __futuAction: Rpc }).__futuAction = fn
+  if (enhanced.has(form)) return
+  enhanced.add(form)
+  form.addEventListener("submit", (e) => {
+    e.preventDefault()
+    const action = (form as unknown as { __futuAction: Rpc }).__futuAction
+    void action(new FormData(form)).then(() => form.reset())
+  })
+}
+
+export function resource<T>(fn: () => Promise<T> | T) {
+  return makeResource(fn, hydrating)
 }
 
 function setAttr(node: Element, name: string, v: unknown) {
@@ -268,8 +298,25 @@ export function use<P>(node: Element, action: Action<P>, params?: () => P): void
 
 let serverHeadCleared = false
 
+const titles: { v: string }[] = []
+const applyTitle = () => {
+  const t = titles.at(-1)
+  if (t) document.title = t.v
+}
+
 export function head(build: (into: Node) => void, title: (() => string) | null): void {
-  if (title) effect(() => void (document.title = title()))
+  if (title) {
+    const entry = { v: "" }
+    titles.push(entry)
+    onCleanup(() => {
+      titles.splice(titles.indexOf(entry), 1)
+      applyTitle()
+    })
+    effect(() => {
+      entry.v = title()
+      applyTitle()
+    })
+  }
   untrack(() => {
     if (!serverHeadCleared) {
       serverHeadCleared = true
@@ -294,6 +341,90 @@ export function head(build: (into: Node) => void, title: (() => string) | null):
     } finally {
       hydrating = was
     }
+  })
+}
+
+type Build = (into: Node) => void
+
+export function layer(
+  parent: Node,
+  build: Build,
+  pending: Build | null,
+  caught: ((into: Node, err: unknown) => void) | null,
+): void {
+  const owner = getOwner()
+  const id = nextLayerId(LayerCtx.use())
+  const L: ClientLayer = { id, count: 0, waiting: signal(0), error: signal<unknown>(undefined), data: [], index: 0 }
+  const scoped = (fn: () => void) =>
+    runWithOwner(owner, () =>
+      root((d) => {
+        provide(LayerCtx, () => L)
+        fn()
+        return d
+      }),
+    )
+
+  const start = comment(parent)
+  let end: Comment | null = null
+  let shown: "pending" | "body" | "error" | null = null
+  let disposeBody: (() => void) | null = null
+  let disposePending: (() => void) | null = null
+  let bodyFrag: DocumentFragment | null = null
+
+  if (hydrating) {
+    const h = hydrationLayer(id)
+    L.data = h?.data ?? []
+    if (h?.error && caught) {
+      scoped(() => caught(parent, h.error))
+      shown = "error"
+    } else {
+      disposeBody = scoped(() => build(parent))
+      shown = "body"
+    }
+    end = claimComment(parent)
+  } else {
+    end = comment(parent)
+    bodyFrag = frag()
+    try {
+      const f = bodyFrag
+      disposeBody = scoped(() => build(f))
+    } catch (e) {
+      L.error.set(e)
+    }
+  }
+
+  const insert = (f: Node) => end!.parentNode!.insertBefore(f, end)
+  effect(() => {
+    const err = L.error.get()
+    const waiting = L.waiting.get() > 0
+    untrack(() => {
+      if (err !== undefined) {
+        if (shown === "error") return
+        disposeBody?.()
+        disposePending?.()
+        clearBetween(start, end!)
+        shown = "error"
+        if (!caught) return console.error(err)
+        const f = frag()
+        scoped(() => caught(f, err))
+        insert(f)
+        return
+      }
+      if (shown === "body" || shown === "error") return
+      if (waiting && pending) {
+        if (shown === "pending") return
+        const f = frag()
+        disposePending = scoped(() => pending(f))
+        insert(f)
+        shown = "pending"
+        return
+      }
+      if (waiting) return
+      disposePending?.()
+      clearBetween(start, end!)
+      insert(bodyFrag!)
+      shown = "body"
+    })
   })
 }
 
@@ -510,8 +641,15 @@ export function print<P>(model: Model<P>, plate: Element, props?: P): () => void
   }
 }
 
-export function heat<P>(model: Model<P>, plate: Element, props?: P): () => void {
+export function heat<P>(
+  model: Model<P>,
+  plate: Element,
+  props?: P,
+  data: unknown[] = [],
+  layers: Record<string, { data: unknown[]; error?: { message: string } }> = {},
+): () => void {
   let disposeRoot!: () => void
+  setHydrationData(data, layers)
   hydrating = true
   cursors = new WeakMap()
   try {

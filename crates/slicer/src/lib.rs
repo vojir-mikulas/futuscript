@@ -22,13 +22,10 @@ pub struct Options<'a> {
 pub fn slice(source: &str, opts: &Options) -> Result<String, Vec<Diagnostic>> {
     let mut diags = Vec::new();
     let blocks = blocks::split(source, &mut diags);
-    if let Some(host) = &blocks.host {
-        diags.push(Diagnostic::new(
-            "(<host>) zatím Slicer neumí, přijde ve fázi 2 (server)",
-            host.name_span.0,
-            host.name_span.1,
-        ));
-    }
+    let host_names = match &blocks.host {
+        Some(h) => rewrite::host_exports(source, h.content, &mut diags),
+        None => Vec::new(),
+    };
 
     let mut proj = projection::Projection::default();
     let setup = match &blocks.setup {
@@ -46,7 +43,7 @@ pub fn slice(source: &str, opts: &Options) -> Result<String, Vec<Diagnostic>> {
     }
 
     let tpl = template::project(&template, source, &mut proj);
-    let rw = rewrite::analyze(&proj, &setup, setup_end, &tpl, opts.dev, &mut diags);
+    let rw = rewrite::analyze(&proj, &setup, setup_end, &tpl, opts.dev, opts.server, &mut diags);
     if !diags.is_empty() {
         return Err(diags);
     }
@@ -77,7 +74,15 @@ pub fn slice(source: &str, opts: &Options) -> Result<String, Vec<Diagnostic>> {
     let mut ts = format!("import * as __f from \"{runtime}\";\n");
     for import in &rw.hoisted {
         // Na serveru se i importované komponenty kompilují serverově.
-        let import = if opts.server { import.replace(".fs\"", ".fs?ssr\"").replace(".fs'", ".fs?ssr'") } else { import.clone() };
+        let import = if opts.server {
+            import
+                .replace(".fs\"", ".fs?ssr\"")
+                .replace(".fs'", ".fs?ssr'")
+                .replace("\"@futuscript/firmware\"", "\"@futuscript/firmware/server\"")
+                .replace("'@futuscript/firmware'", "'@futuscript/firmware/server'")
+        } else {
+            import.clone()
+        };
         ts.push_str(&import);
         ts.push('\n');
     }
@@ -85,11 +90,32 @@ pub fn slice(source: &str, opts: &Options) -> Result<String, Vec<Diagnostic>> {
         let scoped = css::scope(css.trim(), scope);
         ts.push_str(&format!("__f.css({}, {});\n", codegen::js_str(scope), codegen::js_str(&scoped)));
     }
+    if let Some(h) = &blocks.host {
+        let ids: Vec<String> = host_names
+            .iter()
+            .map(|n| format!("{}: {n}", codegen::js_str(n)))
+            .collect();
+        if opts.server {
+            ts.push_str(&source[h.content.0..h.content.1]);
+            ts.push_str(&format!("\n__f.host({}, {{ {} }});\n", codegen::js_str(opts.filename), ids.join(", ")));
+        } else {
+            for n in &host_names {
+                ts.push_str(&format!("const {n} = __f.rpc({});\n", codegen::js_str(&format!("{}#{n}", opts.filename))));
+            }
+        }
+    }
     if !setup.pragmas.is_empty() {
         let list: Vec<String> = setup.pragmas.iter().map(|p| codegen::js_str(p)).collect();
         ts.push_str(&format!("export const procedureDone = [{}];\n", list.join(", ")));
     }
-    ts.push_str(&format!("export default function {}(__props: any = {{}}, {into}: any) {{\n", component_name(opts.filename)));
+    let asyncness = if opts.server { "async " } else { "" };
+    ts.push_str(&format!(
+        "export default {asyncness}function {}(__props: any = {{}}, {into}: any) {{\n",
+        component_name(opts.filename)
+    ));
+    if opts.server {
+        ts.push_str("const __owner = __f.getOwner();\n");
+    }
     ts.push_str(&setup_ts);
     ts.push('\n');
     ts.push_str(&template_ts);

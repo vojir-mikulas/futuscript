@@ -45,7 +45,7 @@
   .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 2px;
     font: 500 18px/1 var(--font-display);
     letter-spacing: -0.04em;
   }

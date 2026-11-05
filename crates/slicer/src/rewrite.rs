@@ -38,6 +38,7 @@ pub fn analyze(
     setup_end: usize,
     tpl: &Projected,
     dev: bool,
+    server: bool,
     diags: &mut Vec<Diagnostic>,
 ) -> Rewritten {
     let text = proj.text.as_str();
@@ -161,6 +162,21 @@ pub fn analyze(
                         d.span.end,
                         format!("const {name} = __f.computed{generic}(() => __props.{name})"),
                     )),
+                    (DeclKind::Async, Some(Expression::AwaitExpression(a))) => {
+                        let arg = a.argument.span();
+                        if server {
+                            out.edits.push(Edit::new(v.span.start, arg.start, format!("const {name} = __f.data(__owner, await (")));
+                            out.edits.push(Edit::new(arg.end, d.span.end, "))"));
+                            out.edits.push(Edit::new(d.span.end, d.span.end, ";\n__f.setOwner(__owner)"));
+                        } else {
+                            out.edits.push(Edit::new(v.span.start, arg.start, format!("const {name} = __f.resource(() => (")));
+                            out.edits.push(Edit::new(arg.end, d.span.end, "))"));
+                        }
+                    }
+                    (DeclKind::Async, _) => diags.push(
+                        Diagnostic::new("M109 čeká `await` hned za `=`", code_span.0, code_span.1)
+                            .with_help(format!("M109 {name} = await …")),
+                    ),
                     (DeclKind::EachItem, _) => unreachable!("položky each nejsou G-kódové deklarace"),
                 }
             }
@@ -326,6 +342,7 @@ impl Rewriter<'_> {
             DeclKind::Prop => "prop (M98) se nedá přepsat, je jen pro čtení",
             DeclKind::Derived => "M105 je odvozená hodnota, nedá se přepsat",
             DeclKind::EachItem => "položka (<each>) je jen pro čtení, změň místo ní seznam",
+            DeclKind::Async => "M109 je výsledek načtení, nedá se přepsat",
             DeclKind::State => unreachable!(),
         };
         self.errors.push((id.span, format!("`{}`: {what}", id.name)));
@@ -430,6 +447,14 @@ impl<'a> Visit<'a> for Rewriter<'_> {
                 self.edits.push(Edit::new(it.span.start, e.expression.span().start, ""));
                 self.visit_expression(&e.expression);
             }
+            name @ ("G0" | "G28") => {
+                let Statement::ExpressionStatement(e) = &it.body else { return };
+                let call = if name == "G0" { "__f.navigate(" } else { "__f.redirect(" };
+                let expr = e.expression.span();
+                self.edits.push(Edit::new(it.span.start, expr.start, call));
+                self.edits.push(Edit::new(expr.end, expr.end, ")"));
+                self.visit_expression(&e.expression);
+            }
             "M117" => {
                 let Statement::ExpressionStatement(e) = &it.body else {
                     return walk::walk_labeled_statement(self, it);
@@ -446,4 +471,40 @@ impl<'a> Visit<'a> for Rewriter<'_> {
             _ => walk::walk_labeled_statement(self, it),
         }
     }
+}
+
+pub fn host_exports(source: &str, range: (usize, usize), diags: &mut Vec<Diagnostic>) -> Vec<String> {
+    let text = &source[range.0..range.1];
+    let allocator = Allocator::default();
+    let ret = Parser::new(&allocator, text, SourceType::ts()).parse();
+    for e in &ret.diagnostics {
+        let (s, en) = e.labels.first().map_or((0, 0), |l| (l.offset() as usize, (l.offset() + l.len()) as usize));
+        diags.push(Diagnostic::new(format!("TypeScript: {}", e.message), range.0 + s, range.0 + en));
+    }
+    let mut names = Vec::new();
+    for stmt in &ret.program.body {
+        match stmt {
+            Statement::ExportDeclaration(e) => match &e.declaration {
+                Declaration::FunctionDeclaration(f) => names.extend(f.id.as_ref().map(|i| i.name.to_string())),
+                Declaration::VariableDeclaration(v) => {
+                    for d in &v.declarations {
+                        if let BindingPattern::BindingIdentifier(id) = &d.id {
+                            names.push(id.name.to_string());
+                        }
+                    }
+                }
+                _ => {}
+            },
+            Statement::ExportNamedDeclaration(_) | Statement::ExportDefaultDeclaration(_) => {
+                let sp = stmt.span();
+                diags.push(Diagnostic::new(
+                    "v (<host>) exportuj přímo: export const getPost = query(…)",
+                    range.0 + sp.start as usize,
+                    range.0 + sp.end as usize,
+                ));
+            }
+            _ => {}
+        }
+    }
+    names
 }

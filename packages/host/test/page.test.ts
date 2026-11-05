@@ -17,7 +17,7 @@ describe("stránka: router → layout → SSR → start() hydratace", () => {
       layouts: ["/plates/_raft.fs"],
       props: { params: m.params, url: "/blog/kytara", locals: { visits: 3 } },
     }
-    const html = renderPage({ page: BlogSSR, layouts: [LayoutSSR], state, entry: "/entry.js" })
+    const html = await renderPage({ page: BlogSSR, layouts: [LayoutSSR], state, entry: "/entry.js" })
     expect(html).toContain("<h1>Článek: kytara</h1>")
     expect(html).toContain('window.__FUTU__={"page":"/plates/blog/[slug].fs"')
     expect(html).toContain("<title>kytara · Blog · Futuscript</title>")

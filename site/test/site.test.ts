@@ -17,12 +17,13 @@ describe("site (written in Futuscript)", () => {
     }
     expect(plate.querySelectorAll("#syntax tbody tr")).toHaveLength(codes.length)
     expect(plate.querySelectorAll("#use-cases article")).toHaveLength(useCases.length)
-    expect($("#playground pre").textContent).toContain("M104 temp = 190")
+    expect($("#playground pre").textContent).toContain("M104 temp = 210")
+    expect($("#playground svg")).not.toBeNull()
 
     const range = $<HTMLInputElement>("#playground input")
     range.value = "270"
     range.dispatchEvent(new Event("input"))
-    expect($("#playground .live").textContent).toContain("Spaghetti")
+    expect($("#playground .live").textContent).toContain("that's spaghetti")
 
     const tabs = Array.from(plate.querySelectorAll<HTMLButtonElement>("#rendering [role=tab]"))
     expect(tabs).toHaveLength(modes.length)

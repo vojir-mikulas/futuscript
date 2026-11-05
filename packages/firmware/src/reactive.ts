@@ -243,6 +243,10 @@ export function getOwner(): Owner | null {
   return currentOwner
 }
 
+export function setOwner(owner: Owner | null): void {
+  currentOwner = owner
+}
+
 export function runWithOwner<T>(owner: Owner | null, fn: () => T): T {
   const prevOwner = currentOwner
   const prevObserver = currentObserver

@@ -6,7 +6,8 @@ import * as __f from "@futuscript/firmware/server";
 import TodoItem from "./TodoItem.fs?ssr";
 import Beer from "./Beer.fs?ssr";
 __f.css("f-554ep1", "h1.f-554ep1 { font-family: \"Futura\", sans-serif; }\n  .active.f-554ep1 { text-decoration: underline; }");
-export default function Todo(__props = {}, __out) {
+export default async function Todo(__props = {}, __out) {
+	const __owner = __f.getOwner();
 	const title = __f.computed(() => __props.title ?? "Úkoly");
 	const todos = __f.signal([]);
 	const draft = __f.signal("");
@@ -31,9 +32,11 @@ export default function Todo(__props = {}, __out) {
 		} : t));
 	}
 	__out.push("<h1", " class=\"f-554ep1\"", ">");
-	__out.push(__f.text(title.get()));
+	__out.push(await __f.text(title.get()));
+	__f.setOwner(__owner);
 	__out.push(" (");
-	__out.push(__f.text(left.get()));
+	__out.push(await __f.text(left.get()));
+	__f.setOwner(__owner);
 	__out.push(")");
 	__out.push("</h1>");
 	__out.push("<form", " class=\"f-554ep1\"", ">");
@@ -55,7 +58,8 @@ export default function Todo(__props = {}, __out) {
 			const __ix = __f.value(__i2);
 			__out.push("<!---->");
 			__out.push("<button", __f.attr("class", __f.clsx([{ active: filter.get() === f.get() }, "f-554ep1"]) || null), ">");
-			__out.push(__f.text(f.get()));
+			__out.push(await __f.text(f.get()));
+			__f.setOwner(__owner);
 			__out.push("</button>");
 			__out.push("<!---->");
 		}
@@ -69,19 +73,21 @@ export default function Todo(__props = {}, __out) {
 			const todo = __f.value(__v6);
 			const __ix = __f.value(__i5);
 			__out.push("<!---->");
-			__f.component(__out, TodoItem, {
+			await __f.component(__out, TodoItem, {
 				get "todo"() {
 					return todo.get();
 				},
 				get "ontoggle"() {
 					return (() => toggle(todo.get().id));
 				}
-			});
+			}, __owner);
+			__f.setOwner(__owner);
 			__out.push("<!---->");
 		}
 		if (!__any4) {
 			__out.push("<!---->");
-			__f.component(__out, Beer, {});
+			await __f.component(__out, Beer, {}, __owner);
+			__f.setOwner(__owner);
 			__out.push("<!---->");
 		}
 		__out.push("<!---->");

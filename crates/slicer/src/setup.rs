@@ -22,6 +22,7 @@ pub enum DeclKind {
     Prop,
     State,
     Derived,
+    Async,
     EachItem,
 }
 
@@ -31,6 +32,7 @@ impl DeclKind {
             DeclKind::Prop => "M98",
             DeclKind::State => "M104",
             DeclKind::Derived => "M105",
+            DeclKind::Async => "M109",
             DeclKind::EachItem => "(<each>)",
         }
     }
@@ -194,7 +196,16 @@ fn project_gcode(
             p.r#gen("M117: ", code_start);
             p.src(rest, rest_start);
         }
-        "M109" => diags.push(err("M109 (async derived) přijde ve fázi 2 spolu s (<layer>)".into())),
+        "M109" => {
+            if !rest.contains("await") {
+                diags.push(err("M109 čeká await".into()).with_help("M109 post = await getPost(slug)"));
+                return;
+            }
+            let proj_start = p.len();
+            p.r#gen("const ", code_start);
+            p.src(rest, rest_start);
+            setup.decls.push(GDecl { kind: DeclKind::Async, proj_start, code_span: (code_start, code_end), rest: false });
+        }
         "M141" => {
             let name_len = rest.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$' || c == '.')).unwrap_or(rest.len());
             let after = rest[name_len..].trim_start();
@@ -214,7 +225,14 @@ fn project_gcode(
             p.src(value_trim, value_start);
             p.r#gen("))", value_start + value_trim.len());
         }
-        "G0" | "G28" => diags.push(err(format!("{} přijde s routerem ve fázi 3", g.code))),
+        "G0" | "G28" => {
+            if g.code == "G0" && rest.is_empty() {
+                diags.push(err("G0 čeká cíl navigace".into()).with_help("G0 \"/projekty\""));
+                return;
+            }
+            p.r#gen(&format!("{}: ", g.code), code_start);
+            p.src(if rest.is_empty() { "\"/\"" } else { rest }, rest_start);
+        }
         other => diags.push(unknown_gcode(other, code_start, code_end)),
     }
 }

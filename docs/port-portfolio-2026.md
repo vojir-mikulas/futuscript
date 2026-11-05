@@ -72,20 +72,20 @@ Stav Futuscriptu dnes: jen klientský rendering (CSR), `if`/`each`, komponenty b
 - [x] **File routing** `src/plates/`: `[lang]/index.fs`, `[lang]/projects/index.fs`,
       `[lang]/projects/[slug].fs`, `studio/index.fs`.
 - [x] **Layouty** `_raft.fs` (vnořené, nepřekreslují se při navigaci).
-- [ ] **404**: `_spaghetti.fs` hotové (status 404). *Zbývá `notFound()` z kódu.*
+- [x] **404**: `_spaghetti.fs` (status 404) + `notFound()` a `G28` redirect z komponenty.
 - [x] **Middleware** `_preheat.ts`: přístup k requestu (headers, cookies, searchParams),
       `redirect()`, nastavení cookie na response. Port `proxy.ts` 1:1.
 - [x] **SSG**: `(<procedureDone> export </procedureDone>)` + `entries` pro `[lang]` a `[slug]`.
-- [ ] **Dynamické routy**: `studio` bez prerenderu (`(<procedureDone> dynamic </procedureDone>)`? domyslet název).
+- [x] **Dynamické routy**: stránka bez `export` pragmy se renderuje při každém requestu.
 - [x] **`(<head>)`**: title, meta, OG tagy, canonical, hreflang alternates (náhrada `generateMetadata`).
-- [ ] **Speciální routy**: `sitemap.xml`, `robots.txt` (`.ts` soubory vracející Response).
-- [ ] **Route handlery** `api/*` (GET/POST v `.ts`, Request → Response).
-- [ ] **`(<host>)` + `query`/`action`**: GitHub contributions, Spotify now playing, studio zápis.
-- [ ] **Request kontext na serveru**: `cookies()`, `headers()` pro skin a referral.
-- [ ] **`M109` + `(<layer>)`**: streaming SSR a Suspense fallbacky (9×).
-- [ ] **Router v klientu**: `<a>` s prefetchem, `pathname`/`searchParams` jako signály, `G0` navigace,
+- [x] **Speciální routy**: `sitemap.xml`, `robots.txt` (`.ts` soubory vracející Response).
+- [x] **Route handlery** `api/*` (GET/POST v `.ts`, Request → Response).
+- [x] **`(<host>)` + `query`/`action`**: GitHub contributions, Spotify now playing, studio zápis.
+- [x] **Request kontext na serveru**: `cookies()`, `headers()` pro skin a referral.
+- [x] **`M109` + `(<layer>)`**: out-of-order streaming, `(<pending>)`/`(<catch>)`, hydratace vrstev, Suspense v klientu.
+- [x] **Router v klientu**: `<a>` s prefetchem, `pathname`/`searchParams` jako signály, `G0` navigace,
       View Transitions mezi stránkami.
-- [ ] **Env proměnné**: `NEXT_PUBLIC_*` → `import.meta.env.PUBLIC_*`, tajemství jen v `(<host>)`.
+- [x] **Env proměnné**: `NEXT_PUBLIC_*` → `import.meta.env.PUBLIC_*`, tajemství jen v `(<host>)`.
 - [ ] **Deploy**: Vercel (Nitro preset nebo vlastní adapter), cache hlavičky pro statické stránky.
 
 ## C. Náhrady za React knihovny

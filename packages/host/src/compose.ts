@@ -3,6 +3,7 @@ import type { Model, Renderable } from "@futuscript/firmware"
 export interface Runtime {
   component: (into: any, model: Model<any>, props: any) => void
   renderable: (build: (into: any) => void) => Renderable
+  page: (into: any, build: (into: any) => void) => void
 }
 
 export interface PageProps {
@@ -13,11 +14,11 @@ export interface PageProps {
 
 export function compose(rt: Runtime, layouts: Model<any>[], page: Model<any>): Model<PageProps> {
   return (props, into) => {
-    let inner = (o: unknown) => rt.component(o, page, props)
+    let inner = (o: unknown): unknown => rt.page(o, (i) => rt.component(i, page, props))
     for (const layout of [...layouts].reverse()) {
       const child = inner
       inner = (o) => rt.component(o, layout, { ...props, infill: rt.renderable(child) })
     }
-    inner(into)
+    return inner(into) as void
   }
 }

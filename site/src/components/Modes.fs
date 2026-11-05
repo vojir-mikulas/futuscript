@@ -16,10 +16,10 @@
 (<extrusion>)
   <section class="section" id="rendering">
     <div class="wrap">
-      <p class="eyebrow"><b>05</b> Rendering</p>
+      <p class="eyebrow">Rendering</p>
       <div class="head">
         <h2 class="title">One pragma per page. <span>Every rendering mode.</span></h2>
-        <p class="intro">The mode is one line at the end of the setup. Every mode is a mix of three axes: when the HTML gets printed, how it's delivered, and when the JavaScript heats up. That's three mechanisms, not twelve features.</p>
+        <p class="intro">The mode is one line in the setup. Every mode mixes three axes: when HTML is printed, how it's delivered, when JavaScript heats up.</p>
         <img class="robot" src={robot} alt="" />
       </div>
       <div class="split">

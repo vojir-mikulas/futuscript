@@ -6,10 +6,10 @@
 (<extrusion>)
   <section class="section" id="syntax">
     <div class="wrap">
-      <p class="eyebrow"><b>02</b> Syntax</p>
+      <p class="eyebrow">Syntax</p>
       <div class="head">
         <h2 class="title">Four blocks and a few printer codes. <span>That's the whole language.</span></h2>
-        <p class="intro">Every block is optional and appears at most once. A file with no blocks is all template. The codes aren't random: each one does roughly what it does on a real printer, so the M10x temperature family is the reactivity family.</p>
+        <p class="intro">Every block is optional. The codes do roughly what they do on a real printer: the M10x temperature family is the reactivity family.</p>
         <img class="robot" src={robot} alt="" />
       </div>
 
@@ -40,7 +40,7 @@
           </tbody>
         </table>
       </div>
-      <p class="note">You won't have to memorise them. The planned editor tooling completes words into codes: type state, get M104, with a hover that says what it does.</p>
+      <p class="note">No need to memorise them: type state, the editor writes M104.</p>
     </div>
   </section>
 (</extrusion>)

@@ -16,8 +16,8 @@ function serve(html: string) {
 }
 
 describe("SSR + hydratace", () => {
-  it("Counter: server HTML, heat převezme stejné uzly", () => {
-    const html = renderToString(CounterSSR, { start: 9 })
+  it("Counter: server HTML, heat převezme stejné uzly", async () => {
+    const html = (await renderToString(CounterSSR, { start: 9 })).html
     expect(html).toContain("<button")
     expect(html).toContain("Klik 9")
     expect(html).toContain("Dvojnásobek: 18")
@@ -36,8 +36,8 @@ describe("SSR + hydratace", () => {
     expect(button.hasAttribute("disabled")).toBe(true)
   })
 
-  it("Todo: each, komponenty a bind po hydrataci", () => {
-    const plate = serve(renderToString(TodoSSR))
+  it("Todo: each, komponenty a bind po hydrataci", async () => {
+    const plate = serve((await renderToString(TodoSSR)).html)
     expect(plate.querySelector("p.hint")!.textContent).toBe("Hotovo. Jdi si pro pivo.")
     const h1 = plate.querySelector("h1")!
     heat(Todo, plate)
@@ -52,8 +52,8 @@ describe("SSR + hydratace", () => {
     expect(h1.textContent).toBe("Úkoly (1)")
   })
 
-  it("Kitchen: infill, makra, match, destrukturování, SVG bez rozbití", () => {
-    const html = renderToString(KitchenSSR)
+  it("Kitchen: infill, makra, match, destrukturování, SVG bez rozbití", async () => {
+    const html = (await renderToString(KitchenSSR)).html
     expect(html).toContain('class="card extra"')
     expect(html).toContain("vlastní hlavička")
     expect(html).toContain("#1 Filament")

@@ -32,10 +32,12 @@ export {
   head,
   heat,
   insert,
+  layer,
   on,
   portal,
   print,
   prop,
+  resource,
   spread,
   style,
   svg,
@@ -44,5 +46,7 @@ export {
   use,
 } from "./dom.ts"
 export type { Action } from "./dom.ts"
-export { clsx, props, renderable, rest, toText } from "./shared.ts"
+export { clsx, isInterrupt, props, renderable, rest, toText } from "./shared.ts"
+export { navigate, notFound, redirect, setNavigator, type NavigateOptions } from "./nav.ts"
+export { rpc, type Resource, type Rpc } from "./data.ts"
 export type { Macro, Model, Renderable } from "./shared.ts"

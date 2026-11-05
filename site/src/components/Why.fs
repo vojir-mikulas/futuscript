@@ -7,10 +7,10 @@
 (<extrusion>)
   <section class="section" id="why">
     <div class="wrap">
-      <p class="eyebrow"><b>01</b> Why</p>
+      <p class="eyebrow">Why</p>
       <div class="head">
         <h2 class="title">The joke is in the structure. <span>The API stays boring.</span></h2>
-        <p class="intro">A .fs file reads like a printer working through its G-code. Underneath it's signals, a compiler and plain TypeScript, so what you know from React, Svelte or Solid carries straight over. Why another framework? Printer Printer Escuella, our resident robot, said it best: we'll build our own, with blackjack and G-codes.</p>
+        <p class="intro">It reads like G-code, but underneath it's signals and plain TypeScript. Why another framework? Printer Printer Escuella put it best: we'll build our own, with blackjack and G-codes.</p>
         <img class="robot" src={robot} alt="" />
       </div>
 
@@ -34,7 +34,7 @@
           <CodeBlock code={futuSample} file="Beers.fs" />
         </div>
       </div>
-      <p class="caption">Same component. No setters, no dependency arrays, no rules of hooks. As Morbo would put it: dependency arrays do not work that way. Good night!</p>
+      <p class="caption">Same component. No setters, no dependency arrays. Dependency arrays do not work that way. Good night!</p>
     </div>
   </section>
 (</extrusion>)

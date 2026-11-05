@@ -76,9 +76,10 @@ export default function futuscript(options: Options = {}): Plugin & VitestHooks 
         return [
           `import * as host from "@futuscript/host"`,
           `const pages = import.meta.glob("/${plates}/**/*.fs", { eager: true, query: "?ssr" })`,
+          `const endpoints = import.meta.glob(["/${plates}/**/*.ts", "!/${plates}/**/_*", "!/${plates}/**/*.d.ts"], { eager: true })`,
           `const pre = import.meta.glob("/${plates}/_preheat.{ts,js}", { eager: true })`,
           `export const preheat = Object.values(pre)[0]?.default`,
-          `export const app = { plates: "/${plates}/", pages }`,
+          `export const app = { plates: "/${plates}/", pages, endpoints }`,
           `export { host }`,
         ].join("\n")
       }
@@ -87,7 +88,6 @@ export default function futuscript(options: Options = {}): Plugin & VitestHooks 
       const dir = resolve(server.config.root, plates)
       if (!existsSync(dir)) return
       server.middlewares.use((req, res, next) => {
-        if (req.method !== "GET" || !req.headers.accept?.includes("text/html")) return next()
         servePage(server, dir, plates, req).then(
           async (page) => {
             if (!page) return next()
@@ -109,6 +109,9 @@ export default function futuscript(options: Options = {}): Plugin & VitestHooks 
       })
     },
     enforce: "pre",
+    config() {
+      return { envPrefix: ["PUBLIC_", "VITE_"] }
+    },
     configResolved(config) {
       dev = config.command === "serve"
       root = config.root
@@ -132,13 +135,20 @@ export default function futuscript(options: Options = {}): Plugin & VitestHooks 
   }
 }
 
-function toRequest(req: IncomingMessage): Request {
+async function toRequest(req: IncomingMessage): Promise<Request> {
   const headers = new Headers()
   for (const [k, v] of Object.entries(req.headers)) {
     if (typeof v === "string") headers.set(k, v)
     else if (Array.isArray(v)) v.forEach((x) => headers.append(k, x))
   }
-  return new Request(`http://${req.headers.host ?? "localhost"}${req.url ?? "/"}`, { method: req.method, headers })
+  const method = req.method ?? "GET"
+  let body: Uint8Array | undefined
+  if (method !== "GET" && method !== "HEAD") {
+    const chunks: Buffer[] = []
+    for await (const c of req) chunks.push(c as Buffer)
+    body = new Uint8Array(Buffer.concat(chunks))
+  }
+  return new Request(`http://${req.headers.host ?? "localhost"}${req.url ?? "/"}`, { method, headers, body: body as BodyInit | undefined })
 }
 
 async function send(res: ServerResponse, r: Response) {
@@ -148,7 +158,8 @@ async function send(res: ServerResponse, r: Response) {
   })
   const cookies = r.headers.getSetCookie()
   if (cookies.length) res.setHeader("Set-Cookie", cookies)
-  res.end(Buffer.from(await r.arrayBuffer()))
+  if (r.body) for await (const chunk of r.body) res.write(chunk)
+  res.end()
 }
 
 async function servePage(server: ViteDevServer, dir: string, plates: string, req: IncomingMessage): Promise<Response | null> {
@@ -158,26 +169,59 @@ async function servePage(server: ViteDevServer, dir: string, plates: string, req
   const preheat: Preheat | undefined = preheatFile
     ? (await server.ssrLoadModule(`/${plates}/${preheatFile}`)).default
     : undefined
-  const pre = await runPreheat(preheat, toRequest(req))
+  const all = (readdirSync(dir, { recursive: true }) as string[]).map((f) => f.replace(/\\/g, "/"))
+  const table = routes(all)
+  const endpoint = match(table.routes.filter((r) => r.kind === "endpoint"), url.pathname)
+  const isRpc = url.pathname === "/_futu/rpc"
+  const isPage = req.method === "GET" && !!req.headers.accept?.includes("text/html")
+  if (!endpoint && !isPage && !isRpc) return null
+  const request = await toRequest(req)
+  const pre = await runPreheat(preheat, request)
   if (pre.response) return pre.response
-  const files = (readdirSync(dir, { recursive: true }) as string[]).filter((f) => f.endsWith(".fs"))
-  const table = routes(files)
-  const m = match(table.routes, url.pathname)
+  if (isRpc) {
+    const host = (await server.ssrLoadModule("@futuscript/host")) as typeof import("@futuscript/host")
+    return host.handleRpc(request, pre.locals, (file) => server.ssrLoadModule(`/${file}?ssr`))
+  }
+  if (endpoint) {
+    const host = (await server.ssrLoadModule("@futuscript/host")) as typeof import("@futuscript/host")
+    const mod = await server.ssrLoadModule(`/${plates}/${endpoint.route.file}`)
+    const res = await host.runWithRequest({ request, locals: pre.locals }, () =>
+      host.callEndpoint(mod, { request, url: new URL(request.url), params: endpoint.params, locals: pre.locals }),
+    )
+    for (const c of pre.setCookies) res.headers.append("Set-Cookie", c)
+    return res
+  }
+  const files = all.filter((f) => f.endsWith(".fs"))
+  const m = match(table.routes.filter((r) => r.kind === "page"), url.pathname)
   const file = m?.route.file ?? table.notFound
   if (!file) return null
   const layouts = m?.route.layouts ?? (files.includes("_raft.fs") ? ["_raft.fs"] : [])
   const id = (f: string) => `/${plates}/${f}`
   const load = async (f: string) => (await server.ssrLoadModule(`${id(f)}?ssr`)).default
-  const [page, ...chain] = await Promise.all([load(file), ...layouts.map(load)])
   // Přes runner Vite, aby render sdílel instanci runtime s komponentami (head, CSS, kontext).
-  const { renderPage } = (await server.ssrLoadModule("@futuscript/host")) as typeof import("@futuscript/host")
-  const html = renderPage({
-    page,
-    layouts: chain,
-    state: { page: id(file), layouts: layouts.map(id), props: { params: m?.params ?? {}, url: url.pathname, locals: pre.locals } },
-    entry: `/@id/__x00__${ENTRY}`,
-  })
+  const host = (await server.ssrLoadModule("@futuscript/host")) as typeof import("@futuscript/host")
+  const draw = async (file: string, layouts: string[], params: Record<string, string>) => {
+    const [page, ...chain] = await Promise.all([load(file), ...layouts.map(load)])
+    return host.renderPageStream({
+      page,
+      layouts: chain,
+      state: { page: id(file), layouts: layouts.map(id), props: { params, url: url.pathname, locals: pre.locals } },
+      entry: `/@id/__x00__${ENTRY}`,
+      headExtra: '<script type="module" src="/@vite/client"></script>',
+    })
+  }
   const headers = new Headers({ "Content-Type": "text/html; charset=utf-8" })
   for (const c of pre.setCookies) headers.append("Set-Cookie", c)
-  return new Response(await server.transformIndexHtml(rawUrl, html), { status: m ? 200 : 404, headers })
+  let html: ReadableStream<Uint8Array>
+  let status = m ? 200 : 404
+  try {
+    html = await host.runWithRequest({ request, locals: pre.locals }, () => draw(file, layouts, m?.params ?? {}))
+  } catch (e) {
+    if (!host.isInterrupt(e)) throw e
+    if (e.futuscript === "redirect") return new Response(null, { status: e.status ?? 307, headers: { Location: e.to! } })
+    if (!table.notFound) return null
+    status = 404
+    html = await draw(table.notFound, files.includes("_raft.fs") ? ["_raft.fs"] : [], {})
+  }
+  return new Response(html, { status, headers })
 }

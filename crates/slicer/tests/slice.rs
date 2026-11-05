@@ -198,3 +198,36 @@ fn server_output() {
     let src = include_str!("../../../examples/Todo.fs");
     insta::assert_snapshot!(slice(src, &Options { filename: "Todo.fs", dev: true, server: true }).unwrap());
 }
+
+#[test]
+fn navigation_gcodes() {
+    let js = ok("(<extruderInitialization>)\n  M104 id = 1\n  function go() {\n    G0 `/p/${id}`\n  }\n  G28 \"/login\"\n(</extruderInitialization>)\n");
+    assert!(js.contains("__f.navigate(`/p/${id.get()}`)"), "{js}");
+    assert!(js.contains("__f.redirect(\"/login\")"), "{js}");
+}
+
+#[test]
+fn server_rewrites_firmware_import() {
+    let src = "(<extruderInitialization>)\n  import { notFound } from \"@futuscript/firmware\"\n  notFound()\n(</extruderInitialization>)\n";
+    let js = slice(src, &Options { filename: "T.fs", dev: true, server: true }).unwrap();
+    assert!(js.contains("from \"@futuscript/firmware/server\""), "{js}");
+}
+
+#[test]
+fn host_block_and_async() {
+    let src = "(<host>)\n  import { query } from \"@futuscript/host\"\n  const secret = \"tajne\"\n  export const getPost = query(async (s: string) => ({ s, secret }))\n(</host>)\n(<extruderInitialization>)\n  M98 slug: string\n  M109 post = await getPost(slug)\n(</extruderInitialization>)\n(<extrusion>)\n  <h1>{post?.s}</h1>\n(</extrusion>)\n";
+    let client = slice(src, &Options { filename: "P.fs", dev: true, server: false }).unwrap();
+    assert!(!client.contains("tajne") && !client.contains("@futuscript/host"), "{client}");
+    assert!(client.contains("const getPost = __f.rpc(\"P.fs#getPost\")"), "{client}");
+    assert!(client.contains("const post = __f.resource(() => getPost(slug.get()))"), "{client}");
+    let server = slice(src, &Options { filename: "P.fs", dev: true, server: true }).unwrap();
+    assert!(server.contains("const secret = \"tajne\""), "{server}");
+    assert!(server.contains("__f.host(\"P.fs\""), "{server}");
+    assert!(server.contains("export default async function P"), "{server}");
+    assert!(server.contains("const post = __f.data(__owner, await getPost(slug.get()))"), "{server}");
+}
+
+#[test]
+fn error_m109_without_await() {
+    insta::assert_snapshot!(err("(<extruderInitialization>)\n  M109 x = 1\n(</extruderInitialization>)\n"));
+}

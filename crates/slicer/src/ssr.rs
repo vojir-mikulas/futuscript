@@ -49,7 +49,7 @@ impl<'a> Ssr<'a> {
         let saved = std::mem::take(&mut self.out);
         self.children(nodes, &o);
         let body = std::mem::replace(&mut self.out, saved);
-        format!("({o}) => {{\n{body}}}")
+        format!("async ({o}) => {{\n{body}}}")
     }
 
     fn e(&self, id: ExprId) -> &str {
@@ -68,6 +68,24 @@ impl<'a> Ssr<'a> {
         for (i, node) in nodes.iter().enumerate() {
             match node {
                 Node::Macro { .. } | Node::Listen { .. } | Node::Portal { .. } => {}
+                Node::Layer { body, pending, catch } => {
+                    // Uvnitř vrstvy platí vlastník vrstvy (její kontext a data), ne komponenty.
+                    let own = |b: String| b.replacen("=> {\n", "=> {\nconst __owner = __f.getOwner();\n", 1);
+                    let b = own(self.builder(body));
+                    let p = pending.as_ref().map_or("null".to_string(), |p| own(self.builder(p)));
+                    let c = match catch {
+                        Some((err, children)) => {
+                            let o = self.var("o");
+                            let saved = std::mem::take(&mut self.out);
+                            self.children(children, &o);
+                            let body = std::mem::replace(&mut self.out, saved);
+                            let e = err.as_ref().map_or("__err".to_string(), |b| b.name.clone());
+                            format!("async ({o}, {e}) => {{\nconst __owner = __f.getOwner();\n{body}}}")
+                        }
+                        None => "null".to_string(),
+                    };
+                    self.line(format!("await __f.layer({out}, __owner, {b}, {p}, {c});\n__f.setOwner(__owner);"));
+                }
                 Node::Head { children } => {
                     let (title, others) = crate::template::split_title(children);
                     let title = title.map_or("null".to_string(), |t| format!("() => {}", crate::codegen::title_expr(&t, self.exprs)));
@@ -79,14 +97,14 @@ impl<'a> Ssr<'a> {
                     }
                     let body = std::mem::replace(&mut self.out, saved);
                     self.scope = scope;
-                    self.line(format!("__f.head(({o}) => {{\n{body}}}, {title});"));
+                    self.line(format!("await __f.head(async ({o}) => {{\n{body}}}, {title});\n__f.setOwner(__owner);"));
                 }
                 Node::Text(t) => {
                     if let Some(t) = normalize_ws(t, i == 0, i == last) {
                         self.line(format!("{out}.push({});", js_str(&esc(&t))));
                     }
                 }
-                Node::Expr(id) => self.line(format!("{out}.push(__f.text({}));", self.e(*id))),
+                Node::Expr(id) => self.line(format!("{out}.push(await __f.text({}));\n__f.setOwner(__owner);", self.e(*id))),
                 Node::Local { name, expr, .. } => {
                     self.line(format!("const {} = __f.computed(() => ({}));", name.name, self.e(*expr)));
                 }
@@ -154,7 +172,7 @@ impl<'a> Ssr<'a> {
                 }
                 Node::Component { name, attrs, infill, named, .. } => {
                     let props = self.component_props(attrs, infill, named);
-                    self.line(format!("__f.component({out}, {name}, {props});"));
+                    self.line(format!("await __f.component({out}, {name}, {props}, __owner);\n__f.setOwner(__owner);"));
                 }
             }
         }

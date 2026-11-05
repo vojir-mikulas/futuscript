@@ -1,9 +1,17 @@
 Use your image generation tool to create ONE image, then save it as a PNG file at exactly this path:
-site/art/robots-v2/errors.png
+site/art/robots-v7/errors.png
 
-The attached image is the reference. Draw the SAME original robot character: tall lanky proportions, worn olive-green and brass riveted steel torso with paint chips, round chest window with a mint-green filament spool, the small open printer mechanism below it, long ribbed hose arms with three-finger brass grippers, thin piston legs, heavy brass-capped boots, squat trapezoid head with the brass hotend nozzle on top and the side hose, two mismatched round camera-lens eyes with half-closed metal eyelids, grille mouth. Same personality: cocky, sarcastic, unimpressed, not cute. Same art style: 2D adult animated sci-fi sitcom cartoon, thick even dark outlines, flat colors with one shadow tone. No text, no letters, no numbers, no logos anywhere.
+The attached image is the reference for our own original character "Printer Printer Escuella". Draw the SAME character in the SAME art style.
 
-Pose and props for this image: sitting on the floor tangled in a huge messy pile of mint-green and orange plastic filament that looks like spaghetti, spiral dizzy lens eyes, sheepish annoyed smirk, holding up one tangled strand as if saying 'who did this'.
+Character (keep exactly): small rounded-box olive-green head; straight thin rigid antenna rod ending in a tiny brass nozzle cone; two SEPARATE short protruding cylindrical lens-tube eyes in brass rings (one slightly bigger) with black pupils and metal shutter eyelids top and bottom; a FIXED rigid horizontal speaker-grille mouth with four slats that NEVER changes shape (identical to the reference); no eyebrows; short ribbed neck; boxy square olive-green torso with rounded corners, brass shoulder caps, brass waist band and a round brass-rimmed porthole with a mint-green filament spool; dark olive accordion-tube arms and legs; olive mitten hands; chunky olive boots with brass soles and ankle bolts; normal build about 5 heads tall.
+
+Emotion: shown ONLY through the eyes (shutter-lid shape, pupil size, gaze, slight tilt of the lens tubes) and body language. The mouth grille stays exactly the same. Eyes for this image: dizzy: spiral swirls in both lenses, lens tubes tilted in different directions.
+
+Art style: clean frame from a classic early-2000s American prime-time animated sci-fi sitcom. Simple geometric shapes, flat fills, one lighter highlight band on metal, uniform thin dark outline, almost no small details, no textures. It must stay ORIGINAL: no visor band joining the eyes, no grid of teeth, no cylindrical head, no door on the chest, no grey-blue body. No text, no letters, no numbers, no logos anywhere.
+
+Direction: the character's face and body are turned toward the LEFT side of the image (three-quarter view facing left).
+
+Pose and props: sitting on the floor tangled in a big messy pile of mint-green and orange plastic filament that looks like spaghetti, holding up one tangled strand, one sweat drop on the head.
 
 Background: fully TRANSPARENT (alpha), no ground plane, no frame, no backdrop. Square 1024x1024, character centered with comfortable padding.
 

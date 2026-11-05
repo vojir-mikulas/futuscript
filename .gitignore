@@ -6,4 +6,6 @@ coverage/
 target/
 
 editors/zed/grammars/
-site/dist/
+
+# Prebuilt site, deployed as-is by VAC (static, dir site/dist). Rebuild: pnpm --filter site build
+!site/dist/

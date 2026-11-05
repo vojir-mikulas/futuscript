@@ -10,6 +10,7 @@ pub const TOP: [&str; 4] = [HOST, SETUP, TEMPLATE, STYLE];
 
 #[derive(Debug, Clone, Copy)]
 pub struct Block {
+    #[allow(dead_code)]
     pub name_span: (usize, usize),
     pub content: (usize, usize),
 }

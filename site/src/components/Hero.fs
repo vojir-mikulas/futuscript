@@ -4,10 +4,10 @@
   import { heroSample } from "../content.ts"
 
   const facts = [
-    { value: "0", label: "virtual DOM nodes. Signals update the DOM directly." },
-    { value: "Rust", label: "compiler, the Slicer, built on Oxc." },
-    { value: "4", label: "blocks per file, every one optional." },
-    { value: "1", label: "boundary for loading, errors and streaming." },
+    { value: "0", label: "virtual DOM nodes" },
+    { value: "Rust", label: "compiler, built on Oxc" },
+    { value: "4", label: "optional blocks per file" },
+    { value: "1", label: "boundary for all async" },
   ]
 (</extruderInitialization>)
 
@@ -15,16 +15,16 @@
   <section class="hero" id="top">
     <div class="inner">
       <div class="copy">
-        <p class="eyebrow"><b>v0</b> Phase 0 · experimental · ready for the year 3000</p>
+        <p class="eyebrow"><b>v0</b> Ready for the year 3000</p>
         <h1>Good news, everyone! <span>Web pages are printed now.</span></h1>
-        <p class="lead">Futuscript is a compiled UI framework with signals, a Rust compiler and no virtual DOM. Its syntax is lifted from the 3D-printed guitar scene in Futurama. The API underneath is deliberately boring, so it feels familiar from the first file.</p>
+        <p class="lead">A compiled UI framework with signals, a Rust compiler and no virtual DOM. The syntax comes from Futurama, the API is deliberately boring.</p>
         <div class="actions">
           <a class="btn green" href="#start">Get started <span>→</span></a>
           <a class="link" href="#syntax">Read the syntax <span>↓</span></a>
         </div>
       </div>
       <div class="sample">
-        <img class="mascot" src={robot} alt="Printer Printer Escuella, the Futuscript robot, holding a freshly printed page" />
+        <img class="mascot flip" src={robot} alt="Printer Printer Escuella, the Futuscript robot, holding a freshly printed page" />
         <CodeBlock code={heroSample} file="DeliveryList.fs" />
       </div>
     </div>

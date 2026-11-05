@@ -7,10 +7,10 @@
 (<extrusion>)
   <section class="section" id="use-cases">
     <div class="wrap">
-      <p class="eyebrow"><b>03</b> Use cases</p>
+      <p class="eyebrow">Use cases</p>
       <div class="head">
         <h2 class="title">Real jobs. <span>Fictional clients.</span></h2>
-        <p class="intro">Six typical projects from the Planet Express logbook, and how each one maps onto Futuscript: which blocks, which codes, which rendering mode.</p>
+        <p class="intro">Six jobs from the Planet Express logbook and how each maps onto Futuscript.</p>
         <img class="robot" src={robot} alt="" />
       </div>
 

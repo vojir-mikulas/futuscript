@@ -20,10 +20,10 @@
 (<extrusion>)
   <section class="section" id="errors">
     <div class="wrap">
-      <p class="eyebrow"><b>06</b> Errors</p>
+      <p class="eyebrow">Errors</p>
       <div class="head">
         <h2 class="title">A failed print is spaghetti. <span>Not a stack trace from Robot Hell.</span></h2>
-        <p class="intro">A failed 3D print ends up as a tangle of plastic noodles, so that's what errors are called. The joke stops at the title. The rest tells you the file, the line, what went wrong and how to fix it.</p>
+        <p class="intro">A failed 3D print is a tangle of plastic noodles, hence the name. The joke stops at the title: you get the file, the line and the fix.</p>
         <img class="robot" src={robot} alt="" />
       </div>
       <div class="split">
@@ -42,7 +42,7 @@
         <aside>
           <p class="mono">At runtime</p>
           <h3>Our crew is replaceable. Your page isn't.</h3>
-          <p>The Planet Express motto, applied to components. When a part of the page throws, the nearest <code>{"(<layer>)"}</code> catches it and prints its fallback. Everything around it keeps running.</p>
+          <p>When a component throws, the nearest <code>{"(<layer>)"}</code> prints its fallback. The rest keeps running.</p>
         </aside>
       </div>
     </div>

@@ -35,18 +35,24 @@ async function slice() {
   const assets = readAssets()
   const plan = await host.prerenderable(app)
   for (const p of plan.pages) {
-    const html = host.render(app, assets, p.route.file, p.route.layouts, { params: p.params, url: p.path, locals: {} })
+    const html = await host.render(app, assets, p.route.file, p.route.layouts, { params: p.params, url: p.path, locals: {} })
     const file = join(dist, "client", p.path, "index.html")
     mkdirSync(dirname(file), { recursive: true })
     writeFileSync(file, html)
   }
+  for (const f of plan.files) {
+    const res = await f.render()
+    const file = join(dist, "client", f.path)
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, Buffer.from(await res.arrayBuffer()))
+  }
   if (plan.notFound) {
-    const html = host.render(app, assets, plan.notFound, plan.rootLayout, { params: {}, url: "/404", locals: {} })
+    const html = await host.render(app, assets, plan.notFound, plan.rootLayout, { params: {}, url: "/404", locals: {} })
     writeFileSync(join(dist, "client", "404.html"), html)
   }
   const ms = Math.round(performance.now() - t0)
-  console.log(`✓ vytištěno za ${ms} ms: ${plan.pages.length} statických stránek${plan.notFound ? " + 404" : ""}`)
-  for (const p of plan.pages) console.log(`  ${p.path}`)
+  console.log(`✓ vytištěno za ${ms} ms: ${plan.pages.length} stránek, ${plan.files.length} souborů${plan.notFound ? " + 404" : ""}`)
+  for (const p of [...plan.pages, ...plan.files]) console.log(`  ${p.path}`)
 }
 
 async function load(): Promise<ServerBundle> {
@@ -81,13 +87,20 @@ const TYPES: Record<string, string> = {
   ".pdf": "application/pdf",
 }
 
-function toRequest(req: IncomingMessage): Request {
+async function toRequest(req: IncomingMessage): Promise<Request> {
   const headers = new Headers()
   for (const [k, v] of Object.entries(req.headers)) {
     if (typeof v === "string") headers.set(k, v)
     else if (Array.isArray(v)) v.forEach((x) => headers.append(k, x))
   }
-  return new Request(`http://${req.headers.host ?? "localhost"}${req.url ?? "/"}`, { method: req.method, headers })
+  const method = req.method ?? "GET"
+  let body: Uint8Array | undefined
+  if (method !== "GET" && method !== "HEAD") {
+    const chunks: Buffer[] = []
+    for await (const c of req) chunks.push(c as Buffer)
+    body = new Uint8Array(Buffer.concat(chunks))
+  }
+  return new Request(`http://${req.headers.host ?? "localhost"}${req.url ?? "/"}`, { method, headers, body: body as BodyInit | undefined })
 }
 
 async function send(res: ServerResponse, r: Response) {
@@ -97,7 +110,8 @@ async function send(res: ServerResponse, r: Response) {
   })
   const cookies = r.headers.getSetCookie()
   if (cookies.length) res.setHeader("Set-Cookie", cookies)
-  res.end(Buffer.from(await r.arrayBuffer()))
+  if (r.body) for await (const chunk of r.body) res.write(chunk)
+  res.end()
 }
 
 async function serve() {
@@ -116,8 +130,18 @@ async function serve() {
         if (path.startsWith("/assets/")) res.setHeader("Cache-Control", "public, max-age=31536000, immutable")
         return createReadStream(file).pipe(res)
       }
-      const pre = await host.runPreheat(preheat, toRequest(req))
+      const request = await toRequest(req)
+      const pre = await host.runPreheat(preheat, request)
       if (pre.response) return send(res, pre.response)
+      const rpc = await host.handleRpc(request, pre.locals)
+      if (rpc) return send(res, rpc)
+      const api = await host.runWithRequest({ request, locals: pre.locals }, () =>
+        host.handleEndpoint(app, request, pre.locals),
+      )
+      if (api) {
+        for (const c of pre.setCookies) api.headers.append("Set-Cookie", c)
+        return send(res, api)
+      }
       const headers = new Headers({ "Content-Type": "text/html; charset=utf-8" })
       for (const c of pre.setCookies) headers.append("Set-Cookie", c)
 
@@ -126,10 +150,13 @@ async function serve() {
         headers.set("X-Futuscript", "static")
         return send(res, new Response(readFileSync(prerendered), { headers }))
       }
-      const page = host.renderUrl(app, assets, path, pre.locals)
+      const page = await host.runWithRequest({ request, locals: pre.locals }, () =>
+        host.renderUrl(app, assets, path, pre.locals),
+      )
       if (!page) return send(res, new Response("Not found", { status: 404 }))
+      if ("redirect" in page) return send(res, new Response(null, { status: page.status, headers: { Location: page.redirect } }))
       headers.set("X-Futuscript", "ssr")
-      return send(res, new Response(page.html, { status: page.status, headers }))
+      return send(res, new Response(page.body, { status: page.status, headers }))
     } catch (e) {
       console.error(e)
       res.statusCode = 500

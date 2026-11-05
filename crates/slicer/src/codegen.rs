@@ -139,6 +139,22 @@ impl<'a> Gen<'a> {
                         }
                     }
                 }
+                Node::Layer { body, pending, catch } => {
+                    let b = self.builder(body, svg);
+                    let p = pending.as_ref().map_or("null".to_string(), |p| self.builder(p, svg));
+                    let c = match catch {
+                        Some((err, children)) => {
+                            let v = self.var();
+                            let saved = std::mem::take(&mut self.out);
+                            self.children(children, &v, svg);
+                            let body = std::mem::replace(&mut self.out, saved);
+                            let e = err.as_ref().map_or("__err".to_string(), |b| b.name.clone());
+                            format!("({v}, {e}) => {{\n{body}}}")
+                        }
+                        None => "null".to_string(),
+                    };
+                    self.line(format!("__f.layer({parent}, {b}, {p}, {c});"));
+                }
                 Node::Head { children } => {
                     let (title, others) = crate::template::split_title(children);
                     let title = title.map_or("null".to_string(), |t| format!("() => {}", title_expr(&t, self.exprs)));

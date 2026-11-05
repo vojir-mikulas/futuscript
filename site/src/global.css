@@ -133,6 +133,13 @@ button { font: inherit; color: inherit; }
 }
 .head > .title { grid-area: title; }
 .head > .intro { grid-area: intro; }
+.head:not(:has(.robot)) {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-areas: "title intro";
+}
+
+/* Robots are drawn facing left; flip the ones that stand left of their content. */
+.flip { transform: scaleX(-1); }
 
 /* The section's robot stands on the same line the intro ends on. */
 .robot {
@@ -151,6 +158,10 @@ button { font: inherit; color: inherit; }
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "title robot" "intro intro";
     gap: 28px 32px;
+  }
+  .head:not(:has(.robot)) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "intro";
   }
   .robot { height: 160px; }
 }

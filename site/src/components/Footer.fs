@@ -7,7 +7,7 @@
     <div class="inner">
       <div class="brand">
         <p class="word"><img src="/rocket.svg" alt="" />Futu<b>script</b></p>
-        <p>Every section of this page is a .fs file, compiled by the Slicer and printed by the Firmware. No virtual DOM was harmed. Printer Printer Escuella slept through the whole build.</p>
+        <p>Every section of this page is a .fs file. Printer slept through the build.</p>
       </div>
       <div class="links">
         <a href="#why">Why</a>
@@ -60,7 +60,7 @@
   .word img {
     width: 30px;
     height: 30px;
-    margin-right: 12px;
+    margin-right: 2px;
   }
   .brand p:last-child {
     max-width: 420px;
