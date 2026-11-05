@@ -1,0 +1,2 @@
+# .fs = Futuscript, ne F#. Dokud nemáme vlastní gramatiku v Linguistu, ať to GitHub nebarví jako F#.
+*.fs linguist-language=Text

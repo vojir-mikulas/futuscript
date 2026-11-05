@@ -1,0 +1,8 @@
+---
+source: crates/slicer/tests/slice.rs
+expression: "err(\"(<extrusion>)\\n  <TodoItem />\\n(</extrusion>)\\n\")"
+---
+Spaghetti v Test.fs:2:4
+ 2 │   <TodoItem />
+   │    ^^^^^^^^ komponenta `TodoItem` není importovaná
+   = pomoc: přidej do (<extruderInitialization>): import TodoItem from "./TodoItem.fs"

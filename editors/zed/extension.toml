@@ -1,0 +1,12 @@
+id = "futuscript"
+name = "Futuscript"
+description = "Zvýrazňování syntaxe pro Futuscript (.fs)"
+version = "0.0.1"
+schema_version = 1
+authors = ["vojir.mikulas@gmail.com"]
+
+# Zed bere gramatiky jen z gitu. `./sync-grammar.sh` zkopíruje editors/tree-sitter-futuscript
+# do lokálního repa v ~/.cache, commitne ji tam a přepíše repository + rev níže.
+[grammars.futuscript]
+repository = "file:///Users/vojir/.cache/futuscript/tree-sitter-futuscript"
+rev = "3248ca5cbab36089766b456d75f501e489d2ae3d"

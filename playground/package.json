@@ -1,0 +1,14 @@
+{
+  "name": "playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cargo build -q -p futuscript-slicer && vite",
+    "build": "cargo build -q -p futuscript-slicer && vite build"
+  },
+  "devDependencies": {
+    "@futuscript/firmware": "workspace:*",
+    "@futuscript/vite": "workspace:*",
+    "vite": "^8.3.5"
+  }
+}

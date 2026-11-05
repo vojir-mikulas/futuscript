@@ -1,0 +1,10 @@
+{
+  "name": "tree-sitter-futuscript",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Tree-sitter gramatika pro Futuscript (.fs)",
+  "scripts": {
+    "generate": "npx --yes tree-sitter-cli@0.27.1 generate",
+    "test": "npx --yes tree-sitter-cli@0.27.1 test"
+  }
+}

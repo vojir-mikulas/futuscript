@@ -1,0 +1,38 @@
+---
+source: crates/slicer/tests/slice.rs
+expression: js
+---
+import * as __f from "@futuscript/firmware";
+__f.css("f-lp6yqx", "button.f-lp6yqx { font-family: \"Futura\", sans-serif; }");
+export default function Counter(__props = {}) {
+	const start = __f.computed(() => __props.start ?? 0);
+	const count = __f.signal(start.get());
+	const double = __f.computed(() => count.get() * 2);
+	__f.userEffect(() => {
+		console.debug(`count je ${count.get()}`);
+	});
+	function inc() {
+		count.set(count.get() + 1);
+	}
+	const __root = __f.frag();
+	const __n1 = __f.el("button");
+	__f.on(__n1, "click", () => inc);
+	__f.attr(__n1, "disabled", () => count.get() >= 10);
+	__n1.className = "f-lp6yqx";
+	__root.append(__n1);
+	__n1.append("Klik ");
+	__f.insert(__n1, () => count.get());
+	__f.branch(__root, [() => count.get() >= 10], [(__n2) => {
+		const __n3 = __f.el("p");
+		__n3.className = "f-lp6yqx";
+		__n2.append(__n3);
+		__n3.append("Dost. Vychladni.");
+	}, (__n4) => {
+		const __n5 = __f.el("p");
+		__n5.className = "f-lp6yqx";
+		__n4.append(__n5);
+		__n5.append("Dvojnásobek: ");
+		__f.insert(__n5, () => double.get());
+	}]);
+	return __root;
+}

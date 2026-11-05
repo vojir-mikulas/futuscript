@@ -1,0 +1,7 @@
+---
+source: crates/slicer/tests/slice.rs
+expression: err(src)
+---
+Spaghetti v Test.fs:6:28
+ 6 │     <button onclick={() => x = 2}>{x}</button>
+   │                            ^ `x`: položka (<each>) je jen pro čtení, změň místo ní seznam

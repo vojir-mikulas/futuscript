@@ -1,0 +1,4 @@
+{
+  // .fs je v projektu Futuscript, ne F#.
+  "file_types": { "Futuscript": ["fs"] }
+}

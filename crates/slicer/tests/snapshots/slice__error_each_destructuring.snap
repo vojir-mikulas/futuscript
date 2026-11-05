@@ -1,0 +1,8 @@
+---
+source: crates/slicer/tests/slice.rs
+expression: "err(\"(<extrusion>)\\n  (<each> {id} of xs )\\n  (</each>)\\n(</extrusion>)\\n\")"
+---
+Spaghetti v Test.fs:2:11
+ 2 │   (<each> {id} of xs )
+   │           ^^^^ destrukturování v (<each>) zatím Slicer neumí
+   = pomoc: (<each> todo of todos by todo.id ), pak {todo.text}

@@ -1,0 +1,4 @@
+{
+  // Dočasně, než bude Futuscript VS Code extension (fáze 1): .fs jako HTML místo vestavěného F#.
+  "files.associations": { "*.fs": "html" }
+}

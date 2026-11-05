@@ -1,0 +1,18 @@
+[package]
+name = "futuscript-slicer"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "futuscript_slicer"
+
+[[bin]]
+name = "futu-slice"
+path = "src/main.rs"
+
+[dependencies]
+oxc = { version = "0.157", features = ["semantic", "transformer", "codegen", "ast_visit"] }
+
+[dev-dependencies]
+insta = "1"

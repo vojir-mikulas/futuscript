@@ -1,0 +1,21 @@
+{
+  "grammars": [
+    {
+      "name": "futuscript",
+      "camelcase": "Futuscript",
+      "scope": "source.futuscript",
+      "path": ".",
+      "file-types": ["fs"],
+      "highlights": "../zed/languages/futuscript/highlights.scm",
+      "injections": "../zed/languages/futuscript/injections.scm",
+      "external-files": ["src/scanner.c"]
+    }
+  ],
+  "metadata": {
+    "version": "0.0.1",
+    "license": "MIT",
+    "description": "Futuscript grammar",
+    "links": { "repository": "https://github.com/futuscript/futuscript" }
+  },
+  "bindings": { "c": false, "go": false, "node": false, "python": false, "rust": false, "swift": false, "zig": false }
+}

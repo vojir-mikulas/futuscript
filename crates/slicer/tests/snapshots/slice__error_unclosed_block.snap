@@ -1,0 +1,8 @@
+---
+source: crates/slicer/tests/slice.rs
+expression: err(src)
+---
+Spaghetti v Test.fs:1:3
+ 1 │ (<extruderInitialization>)
+   │   ^^^^^^^^^^^^^^^^^^^^^^ blok (<extruderInitialization>) není uzavřený
+   = pomoc: přidej (</extruderInitialization>) před (<extrusion>)

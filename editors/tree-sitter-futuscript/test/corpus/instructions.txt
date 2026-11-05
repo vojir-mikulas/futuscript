@@ -1,0 +1,96 @@
+==================
+Argumenty se závorkami končí před poslední )
+==================
+
+(<extrusion>)
+  (<if> fn(a) )
+    <p>x</p>
+  (<elseif> b)
+  (<else>)
+  (</if>)
+(</extrusion>)
+
+---
+
+(source_file
+  (template_block
+    (block_start
+      (block_name))
+    (instruction
+      (instruction_name)
+      (instruction_args))
+    (start_tag
+      (tag_name))
+    (text)
+    (end_tag
+      (tag_name))
+    (instruction
+      (instruction_name)
+      (instruction_args))
+    (instruction
+      (instruction_name))
+    (instruction
+      (instruction_name))
+    (block_end
+      (block_name))))
+
+==================
+Pragma v setupu a G-kódy
+==================
+
+(<extruderInitialization>)
+  M104 count = 0
+  Math.max(1, 2)
+  (<procedureDone> export every 60s </procedureDone>)
+(</extruderInitialization>)
+
+---
+
+(source_file
+  (setup_block
+    (block_start
+      (block_name))
+    (gcode_line
+      (gcode)
+      (code))
+    (code)
+    (instruction
+      (instruction_name)
+      (instruction_args)
+      (instruction_name))
+    (block_end
+      (block_name))))
+
+==================
+Soubor bez bloků, komponenty a výrazy
+==================
+
+<!-- Beer.fs -->
+<p class="hint" {title} onclick={() => { a = { b: 1 } }}>Hotovo (fakt) {x}</p>
+<TodoItem {todo} />
+
+---
+
+(source_file
+  (comment)
+  (start_tag
+    (tag_name)
+    (attribute
+      (attribute_name)
+      (quoted_attribute_value
+        (attribute_value)))
+    (expression
+      (expression_content))
+    (attribute
+      (attribute_name)
+      (expression
+        (expression_content))))
+  (text)
+  (expression
+    (expression_content))
+  (end_tag
+    (tag_name))
+  (start_tag
+    (tag_name)
+    (expression
+      (expression_content))))
