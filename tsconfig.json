@@ -22,6 +22,10 @@
     "packages/*/src",
     "packages/*/test",
     "playground/src",
-    "playground/test"
+    "playground/test",
+    "site/src",
+    "site/test",
+    "demo/src",
+    "packages/host/test"
   ]
 }

@@ -1,0 +1,14 @@
+Use your image generation tool to create ONE image, then save it as a PNG file at exactly this path:
+site/art/robots-v2/hero.png
+
+Character: an ORIGINAL robot mascot for a web framework where web pages get 3D printed. It must be an original design, not any existing cartoon robot. Personality: cocky, sarcastic, street-smart, a bit lazy, NOT cute and NOT childlike.
+
+Design: tall and lanky adult proportions (small head relative to body, long limbs). Body is an old industrial machine built out of a 3D printer: a tall slightly tapered steel torso with rivets, small dents and worn olive-green and brass paint chips; a round window on the chest showing a spool of mint-green filament inside; long flexible ribbed hose arms ending in three-finger mechanical grippers; thin piston legs with heavy boot-like feet. Head is a squat trapezoid box with a brass 3D-printer hotend nozzle sticking out of the top like a chimney, two mismatched round camera-lens eyes (one slightly larger) with half-closed metal eyelids giving a smug, unimpressed look, and a horizontal speaker-grille mouth curled into a smirk.
+
+Art style: 2D cartoon like a classic American adult animated sci-fi sitcom: thick even dark outlines, flat colors with one shadow tone, slightly exaggerated but grounded proportions, retro-futuristic. Not 3D render, no text, no letters, no logos.
+
+Pose for this image: leaning back casually with weight on one leg, one gripper holding a freshly printed sheet of paper (a tiny web page layout) with a wisp of steam, the other gripper resting on the hip, smug grin.
+
+Background: fully TRANSPARENT (alpha), no ground, no frame. Square 1024x1024, character centered with padding.
+
+Save only the final image to the path above. Do not modify any other files.

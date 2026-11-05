@@ -1,18 +1,8 @@
-//! Projekce `(<extruderInitialization>)` do TypeScriptu.
-//!
-//! G-kódy se přepíšou jen výměnou prefixu, zbytek řádku je obyčejný TS a parsuje ho Oxc:
-//! - `M98 name: T = v`  → `let name: T = v`        (prop)
-//! - `M104 x = v`       → `let x = v`              (state)
-//! - `M105 x = e`       → `const x = e`            (derived)
-//! - `M106 { … }`       → `M106: { … }`            (label; přepíše se až podle AST)
-//! - `M117 expr`        → `M117: expr`
-
 use crate::diagnostic::Diagnostic;
 use crate::instruction::{self, Kind};
 use crate::projection::Projection;
 use crate::suggest;
 
-/// G-kódy a jejich význam (pro hlášky a nápovědy).
 pub const CODES: &[(&str, &str)] = &[
     ("M98", "prop"),
     ("M104", "state"),
@@ -32,7 +22,6 @@ pub enum DeclKind {
     Prop,
     State,
     Derived,
-    /// Položka nebo index z `(<each>)`. Je to signál, jen pro čtení.
     EachItem,
 }
 
@@ -50,9 +39,9 @@ impl DeclKind {
 #[derive(Debug, Clone)]
 pub struct GDecl {
     pub kind: DeclKind,
-    /// Pozice `let`/`const` v projekci = začátek VariableDeclaration v AST.
     pub proj_start: usize,
     pub code_span: (usize, usize),
+    pub rest: bool,
 }
 
 #[derive(Debug, Default)]
@@ -67,7 +56,6 @@ pub struct GPrefix<'a> {
     pub len: usize,
 }
 
-/// `M104 …`, `G0 …`, `:M104 …`. Za kódem musí být mezera, `{` nebo konec řádku.
 pub fn gcode_prefix(t: &str) -> Option<GPrefix<'_>> {
     let b = t.as_bytes();
     let module = b.first() == Some(&b':');
@@ -152,8 +140,16 @@ fn project_gcode(
 
     match g.code {
         "M98" => {
-            if rest.starts_with("...") {
-                diags.push(err("`M98 ...rest` zatím Slicer neumí".into()));
+            if let Some(name) = rest.strip_prefix("...") {
+                let name = name.trim();
+                if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') {
+                    diags.push(err("za M98 ... čekám jméno".into()).with_help("M98 ...rest"));
+                    return;
+                }
+                let proj_start = p.len();
+                p.r#gen("let ", code_start);
+                p.src(name, rest_start + 3);
+                setup.decls.push(GDecl { kind: DeclKind::Prop, proj_start, code_span: (code_start, code_end), rest: true });
                 return;
             }
             let name_len = rest.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).unwrap_or(rest.len());
@@ -167,7 +163,7 @@ fn project_gcode(
             p.src(&rest[..name_len], rest_start);
             let after = name_len + usize::from(optional);
             p.src(&rest[after..], rest_start + after);
-            setup.decls.push(GDecl { kind: DeclKind::Prop, proj_start, code_span: (code_start, code_end) });
+            setup.decls.push(GDecl { kind: DeclKind::Prop, proj_start, code_span: (code_start, code_end), rest: false });
         }
         "M104" | "M105" => {
             let (kind, keyword) =
@@ -179,14 +175,15 @@ fn project_gcode(
             let proj_start = p.len();
             p.r#gen(keyword, code_start);
             p.src(rest, rest_start);
-            setup.decls.push(GDecl { kind, proj_start, code_span: (code_start, code_end) });
+            setup.decls.push(GDecl { kind, proj_start, code_span: (code_start, code_end), rest: false });
         }
         "M106" | "M107" | "M600" => {
             if !rest.starts_with('{') {
                 diags.push(err(format!("{} čeká blok kódu", g.code)).with_help(format!("{} {{ … }}", g.code)));
                 return;
             }
-            p.r#gen(&format!("{}: ", g.code), code_start);
+            // Šipka, aby v těle fungoval `return cleanup`.
+            p.r#gen(&format!("{}: () => ", g.code), code_start);
             p.src(rest, rest_start);
         }
         "M117" => {
@@ -198,7 +195,25 @@ fn project_gcode(
             p.src(rest, rest_start);
         }
         "M109" => diags.push(err("M109 (async derived) přijde ve fázi 2 spolu s (<layer>)".into())),
-        "M141" => diags.push(err("M141 (context) zatím Slicer neumí".into())),
+        "M141" => {
+            let name_len = rest.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$' || c == '.')).unwrap_or(rest.len());
+            let after = rest[name_len..].trim_start();
+            let Some(value) = after.strip_prefix('=').filter(|v| !v.starts_with('=')) else {
+                diags.push(
+                    err("M141 poskytuje kontext celému podstromu".into())
+                        .with_help("M141 Theme = \"dark\"   (Theme = context(\"light\") z .ts souboru), číst přes Theme.use()"),
+                );
+                return;
+            };
+            let value_start = rest_start + (rest.len() - value.len());
+            let value_trim = value.trim_start();
+            let value_start = value_start + (value.len() - value_trim.len());
+            p.r#gen("M141: __f.provide(", code_start);
+            p.src(&rest[..name_len], rest_start);
+            p.r#gen(", () => (", value_start);
+            p.src(value_trim, value_start);
+            p.r#gen("))", value_start + value_trim.len());
+        }
         "G0" | "G28" => diags.push(err(format!("{} přijde s routerem ve fázi 3", g.code))),
         other => diags.push(unknown_gcode(other, code_start, code_end)),
     }

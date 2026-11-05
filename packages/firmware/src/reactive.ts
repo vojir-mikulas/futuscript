@@ -1,12 +1,4 @@
-/**
- * Reaktivní jádro: push-pull signály (algoritmus ve stylu Reactively / alien-signals).
- *
- * - `signal` drží hodnotu, `computed` je líná a cachovaná, `effect` běží při změně závislostí.
- * - Zápis jen označí závislé uzly (DIRTY přímé, CHECK tranzitivní). Přepočet proběhne až při
- *   čtení nebo flushi efektů, takže nevznikají glitche (diamant se přepočítá jednou).
- * - Ownership: efekty vytvořené uvnitř efektu/rootu jsou jeho děti a uklidí se s ním.
- */
-
+// Push-pull signály: zápis jen značí (DIRTY/CHECK), přepočet až při čtení nebo flushi efektů.
 const CLEAN = 0
 const CHECK = 1
 const DIRTY = 2
@@ -17,6 +9,7 @@ export interface Owner {
   children: Owner[] | null
   cleanups: (() => void)[] | null
   disposed: boolean
+  context?: Map<Context<unknown>, () => unknown>
 }
 
 class ReactiveNode<T = unknown> implements Owner {
@@ -49,7 +42,6 @@ class ReactiveNode<T = unknown> implements Owner {
     return this.value
   }
 
-  /** Vrací zapsanou hodnotu, aby `x = 5` fungovalo i jako výraz. */
   set(value: T): T {
     if (this.fn) throw new Error("computed hodnota se nedá přepsat")
     if (Object.is(this.value, value)) return value
@@ -58,9 +50,14 @@ class ReactiveNode<T = unknown> implements Owner {
     if (!batchDepth) flush()
     return value
   }
+
+  notify(): void {
+    for (const o of this.observers) mark(o, DIRTY)
+    if (!batchDepth) flush()
+  }
 }
 
-export type Signal<T> = Pick<ReactiveNode<T>, "get" | "set">
+export type Signal<T> = Pick<ReactiveNode<T>, "get" | "set" | "notify">
 export type Computed<T> = Pick<ReactiveNode<T>, "get">
 
 let currentObserver: ReactiveNode | null = null
@@ -109,7 +106,6 @@ function run(node: ReactiveNode) {
   }
 }
 
-/** Uklidí děti, cleanupy a odpojí zdroje (před re-runem nebo při dispose). */
 function clean(owner: Owner) {
   if (owner.children) {
     const children = owner.children
@@ -130,7 +126,6 @@ function clean(owner: Owner) {
 function dispose(owner: Owner) {
   if (owner.disposed) return
   owner.disposed = true
-  // Odpojit od rodiče, ať se v dlouho žijících seznamech nehromadí mrtví vlastníci.
   const siblings = owner.owner?.children
   if (siblings) {
     const i = siblings.indexOf(owner)
@@ -153,11 +148,16 @@ function flush() {
   }
 }
 
-/** `x++` / `++x` na signálu se správnou návratovou hodnotou (stará / nová). */
 export function update(s: Signal<number>, delta: number, postfix: boolean): number {
   const old = s.get()
   s.set(old + delta)
   return postfix ? old : old + delta
+}
+
+export function mutate<R>(s: Signal<unknown>, fn: () => R): R {
+  const r = fn()
+  s.notify()
+  return r
 }
 
 export function signal<T>(value: T): Signal<T> {
@@ -168,7 +168,6 @@ export function computed<T>(fn: () => T): Computed<T> {
   return new ReactiveNode<T>(undefined as T, fn, false)
 }
 
-/** Efekt běží hned a pak při každé změně závislostí. Smí vrátit cleanup. */
 export function effect(fn: () => void | (() => void)): () => void {
   const node = new ReactiveNode<unknown>(undefined, fn, true)
   run(node)
@@ -195,7 +194,6 @@ export function untrack<T>(fn: () => T): T {
   }
 }
 
-/** Nový owner. Pokud vzniká uvnitř jiného ownera, uklidí se s ním. */
 export function root<T>(fn: (dispose: () => void) => T): T {
   const owner: Owner = { owner: currentOwner, children: null, cleanups: null, disposed: false }
   if (currentOwner) (currentOwner.children ??= []).push(owner)
@@ -211,11 +209,34 @@ export function root<T>(fn: (dispose: () => void) => T): T {
   }
 }
 
+export interface Context<T> {
+  readonly defaultValue: T
+  use(): T
+}
+
+export function context<T>(defaultValue: T): Context<T> {
+  const ctx: Context<T> = {
+    defaultValue,
+    use() {
+      for (let o: Owner | null = currentOwner; o; o = o.owner) {
+        const get = o.context?.get(ctx as Context<unknown>)
+        if (get) return get() as T
+      }
+      return defaultValue
+    },
+  }
+  return ctx
+}
+
+export function provide<T>(ctx: Context<T>, get: () => T): void {
+  if (!currentOwner) throw new Error("M141 musí být v komponentě")
+  ;(currentOwner.context ??= new Map()).set(ctx as Context<unknown>, get)
+}
+
 export function onCleanup(fn: () => void): void {
   if (currentOwner) (currentOwner.cleanups ??= []).push(fn)
 }
 
-/** `M107 { … }` */
 export const onDestroy = onCleanup
 
 export function getOwner(): Owner | null {
@@ -238,10 +259,7 @@ export function runWithOwner<T>(owner: Owner | null, fn: () => T): T {
 const mountQueue: { owner: Owner | null; fn: () => void | (() => void) }[] = []
 let mountScheduled = false
 
-/**
- * `M106 { … }`: uživatelský efekt. Poprvé běží až po vložení do DOM (jako `$effect` ve Svelte),
- * takže v něm jde sahat na elementy.
- */
+// M106: první běh až po vložení do DOM.
 export function userEffect(fn: () => void | (() => void)): void {
   mountQueue.push({ owner: currentOwner, fn })
   if (!mountScheduled) {

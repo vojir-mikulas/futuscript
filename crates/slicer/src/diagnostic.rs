@@ -1,6 +1,5 @@
 use std::fmt::Write;
 
-/// Chyba nebo varování se zdrojovou pozicí (byte offsety do `.fs` souboru).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub message: String,
@@ -20,13 +19,6 @@ impl Diagnostic {
     }
 }
 
-/// Vyrenderuje chyby ve stylu Elmu/Rustu: místo, výřez kódu, podtržení a nápověda.
-///
-/// ```text
-/// Spaghetti v Counter.fs:3:3
-///  3 │   M14 count = 0
-///    │   ^^^ neznámý G-kód. Mysleli jste M104 (state)?
-/// ```
 pub fn render(diags: &[Diagnostic], source: &str, filename: &str) -> String {
     let mut out = String::new();
     for (i, d) in diags.iter().enumerate() {
@@ -42,7 +34,6 @@ pub fn render(diags: &[Diagnostic], source: &str, filename: &str) -> String {
 
         let gutter = line_no.to_string();
         let pad = " ".repeat(gutter.len());
-        // Odsazení pod podtržením kopíruje taby, aby `^` sedělo i v odsazeném kódu.
         let lead: String =
             source[line_start..start].chars().map(|c| if c == '\t' { '\t' } else { ' ' }).collect();
         let end = floor_char_boundary(source, d.end.min(line_end).max(start));

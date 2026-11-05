@@ -7,7 +7,9 @@
     "test": "cargo build -q && vitest run && cargo test -q",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json",
-    "dev": "pnpm --filter playground dev"
+    "dev": "pnpm --filter playground dev",
+    "site": "pnpm --filter site dev",
+    "demo": "pnpm --filter demo dev"
   },
   "devDependencies": {
     "@futuscript/vite": "workspace:*",

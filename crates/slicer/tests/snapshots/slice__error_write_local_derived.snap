@@ -1,0 +1,7 @@
+---
+source: crates/slicer/tests/slice.rs
+expression: "err(\"(<extrusion>)\\n  (<each> t of [1, 2] )\\n    M105 big = t > 1\\n    <button onclick={() => (big = false)}>{big}</button>\\n  (</each>)\\n(</extrusion>)\\n\")"
+---
+Spaghetti v Test.fs:4:29
+ 4 │     <button onclick={() => (big = false)}>{big}</button>
+   │                             ^^^ `big`: M105 je odvozená hodnota, nedá se přepsat

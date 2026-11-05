@@ -1,8 +1,4 @@
-//! Scoped CSS pro `(<filament>)`: ke každému selektoru se přidá třída komponenty.
-//! `button` → `button.f-1a2b3c`, `a:hover` → `a.f-1a2b3c:hover`, `:global(body)` → `body`.
-
 pub fn class_for(filename: &str, css: &str) -> String {
-    // FNV-1a, stačí na stabilní krátké ID.
     let mut h: u32 = 0x811c9dc5;
     for b in filename.bytes().chain([0]).chain(css.bytes()) {
         h ^= u32::from(b);
@@ -62,7 +58,6 @@ fn scope_rules(css: &str, mut i: usize, end: usize, sel: &str, out: &mut String)
     }
 }
 
-/// Přeskočí řetězec nebo komentář, jinak jeden bajt.
 fn skip_atom(b: &[u8], i: usize, end: usize) -> usize {
     match b[i] {
         q @ (b'"' | b'\'') => {
@@ -83,7 +78,6 @@ fn skip_atom(b: &[u8], i: usize, end: usize) -> usize {
     }
 }
 
-/// Index `}` uzavírající blok, který začíná na `i` (za `{`).
 fn block_end(b: &[u8], mut i: usize, end: usize) -> usize {
     let mut depth = 0;
     while i < end {
@@ -110,7 +104,6 @@ fn scope_selector(s: &str, sel: &str) -> String {
         return inner.to_string();
     }
     let b = s.as_bytes();
-    // Začátek posledního složeného selektoru (za poslední mezerou nebo kombinátorem).
     let mut depth = 0;
     let mut last = 0;
     for (i, c) in b.iter().enumerate() {

@@ -1,12 +1,12 @@
 ---
 source: crates/slicer/tests/slice.rs
-expression: "slice(src, &Options { filename: \"Todo.fs\", dev: true }).unwrap()"
+expression: "slice(src, &Options\n{ filename: \"Todo.fs\", dev: true, server: false }).unwrap()"
 ---
 import * as __f from "@futuscript/firmware";
 import TodoItem from "./TodoItem.fs";
 import Beer from "./Beer.fs";
 __f.css("f-554ep1", "h1.f-554ep1 { font-family: \"Futura\", sans-serif; }\n  .active.f-554ep1 { text-decoration: underline; }");
-export default function Todo(__props = {}) {
+export default function Todo(__props = {}, __root) {
 	const title = __f.computed(() => __props.title ?? "Úkoly");
 	const todos = __f.signal([]);
 	const draft = __f.signal("");
@@ -30,41 +30,34 @@ export default function Todo(__props = {}) {
 			done: !t.done
 		} : t));
 	}
-	const __root = __f.frag();
-	const __n1 = __f.el("h1");
-	__n1.className = "f-554ep1";
-	__root.append(__n1);
+	const __n1 = __f.el(__root, "h1");
+	__n1.setAttribute("class", "f-554ep1");
 	__f.insert(__n1, () => title.get());
-	__n1.append(" (");
+	__f.text(__n1, " (");
 	__f.insert(__n1, () => left.get());
-	__n1.append(")");
-	const __n2 = __f.el("form");
+	__f.text(__n1, ")");
+	const __n2 = __f.el(__root, "form");
+	__n2.setAttribute("class", "f-554ep1");
 	__f.on(__n2, "submit", () => add);
-	__n2.className = "f-554ep1";
-	__root.append(__n2);
-	const __n3 = __f.el("input");
+	const __n3 = __f.el(__n2, "input");
+	__n3.setAttribute("class", "f-554ep1");
 	__f.bind(__n3, "value", () => draft.get(), (__v) => {
 		draft.set(__v);
 	});
 	__n3.setAttribute("placeholder", "Co je potřeba vytisknout?");
-	__n3.className = "f-554ep1";
-	__n2.append(__n3);
-	const __n4 = __f.el("button");
-	__n4.className = "f-554ep1";
-	__n2.append(__n4);
-	__n4.append("Přidat");
-	const __n5 = __f.el("nav");
-	__n5.className = "f-554ep1";
-	__root.append(__n5);
+	const __n4 = __f.el(__n2, "button");
+	__n4.setAttribute("class", "f-554ep1");
+	__f.text(__n4, "Přidat");
+	const __n5 = __f.el(__root, "nav");
+	__n5.setAttribute("class", "f-554ep1");
 	__f.each(__n5, () => [
 		"all",
 		"open",
 		"done"
 	], null, (__n6, f, __i) => {
-		const __n7 = __f.el("button");
+		const __n7 = __f.el(__n6, "button");
 		__f.cls(__n7, () => ({ active: filter.get() === f.get() }), "f-554ep1");
 		__f.on(__n7, "click", () => (() => filter.set(f.get())));
-		__n6.append(__n7);
 		__f.insert(__n7, () => f.get());
 	});
 	__f.each(__root, () => visible.get(), (todo) => todo.id, (__n8, todo, __i) => {
@@ -79,5 +72,4 @@ export default function Todo(__props = {}) {
 	}, (__n9) => {
 		__f.component(__n9, Beer, {});
 	});
-	return __root;
 }

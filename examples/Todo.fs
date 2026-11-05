@@ -9,7 +9,7 @@
   M104 filter: "all" | "open" | "done" = "all"
   M105 visible = todos.filter(t => filter === "all" || (filter === "done") === t.done)
   M105 left = todos.filter(t => !t.done).length
-  let nextId = 1                       // obyčejná proměnná, v šabloně není, nemusí být reaktivní
+  let nextId = 1
 
   function add(e: SubmitEvent) {
     e.preventDefault()

@@ -1,13 +1,9 @@
-//! Řádkové instrukce v závorkách: `(<name> args )`, `(</name>)` a `(<name> args </name>)`.
-
 use crate::diagnostic::Diagnostic;
 
-/// Jeden řádek zdroje (bez `\n` a bez koncového `\r`).
 pub struct Line<'a> {
     pub start: usize,
     pub text: &'a str,
     pub has_newline: bool,
-    /// Začátek dalšího řádku.
     pub next: usize,
 }
 
@@ -29,11 +25,8 @@ pub fn lines(src: &str, from: usize, to: usize) -> Vec<Line<'_>> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
-    /// `(<if> user )`: otevírá blok nebo segment (separátory jako `else`).
     Open,
-    /// `(</if>)`
     Close,
-    /// `(<procedureDone> export </procedureDone>)`: samostatná instrukce bez těla.
     Standalone,
 }
 
@@ -43,12 +36,10 @@ pub struct Instr<'a> {
     pub name: &'a str,
     pub name_start: usize,
     pub name_end: usize,
-    /// Argumenty bez okrajových mezer. Prázdné u `Close`.
     pub args: &'a str,
     pub args_start: usize,
 }
 
-/// `text` je řádek oříznutý zleva, začíná `(<`. `offset` je pozice `text` ve zdroji.
 pub fn parse(text: &str, offset: usize) -> Result<Instr<'_>, Diagnostic> {
     let t = text.trim_end();
     let closing = t.starts_with("(</");

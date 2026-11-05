@@ -1,0 +1,16 @@
+[package]
+name = "futuscript-slicer-node"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+futuscript-slicer = { version = "0.0.0", path = "../slicer" }
+napi = { version = "3", default-features = false, features = ["napi4"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"

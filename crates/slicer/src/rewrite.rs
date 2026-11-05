@@ -1,17 +1,3 @@
-//! Analýza projekce přes Oxc a přepis reaktivních proměnných na signály.
-//!
-//! Oxc vyřeší scope, takže víme, který identifikátor opravdu odkazuje na `M104` stav
-//! (a ne třeba na stejně pojmenovaný parametr funkce). Výstupem jsou textové úpravy.
-//!
-//! | Zdroj              | Výstup                                  |
-//! |--------------------|-----------------------------------------|
-//! | `M104 x = v`       | `const x = __f.signal(v)`               |
-//! | `M105 x = e`       | `const x = __f.computed(() => (e))`     |
-//! | `M98 x = d`        | `const x = __f.computed(() => __props.x ?? (d))` |
-//! | čtení `x`          | `x.get()`                               |
-//! | `x = e`, `x += e`  | `x.set(e)`, `x.set(x.get() + (e))`      |
-//! | `M106 { … }`       | `__f.userEffect(() => { … });`          |
-
 use std::collections::{HashMap, HashSet};
 
 use oxc::allocator::Allocator;
@@ -42,8 +28,8 @@ impl Edit {
 #[derive(Debug, Default)]
 pub struct Rewritten {
     pub edits: Vec<Edit>,
-    /// Importy ze setupu, které se přesunou na úroveň modulu.
     pub hoisted: Vec<String>,
+    pub each_names: HashMap<usize, Vec<String>>,
 }
 
 pub fn analyze(
@@ -78,6 +64,8 @@ pub fn analyze(
     let decl_at: HashMap<usize, _> = setup.decls.iter().map(|d| (d.proj_start, d)).collect();
     let mut found = HashSet::new();
     let mut errors: Vec<(Span, String)> = Vec::new();
+    let mut prop_names: Vec<String> = Vec::new();
+    let mut rest_decl: Option<(u32, u32, String)> = None;
 
     for stmt in &program.body {
         let span = stmt.span();
@@ -86,14 +74,23 @@ pub fn analyze(
         }
         match stmt {
             Statement::ImportDeclaration(_) => {
+                // Poslední příkaz setupu může spolknout `;` oddělovače za ním.
+                let span = Span::new(span.start, span.end.min(setup_end as u32));
+                out.hoisted.push(span.source_text(text).to_string());
+                out.edits.push(Edit::new(span.start, span.end, ""));
+            }
+            Statement::ExportDeclaration(e) if exports_entries(e) => {
+                let span = Span::new(span.start, span.end.min(setup_end as u32));
                 out.hoisted.push(span.source_text(text).to_string());
                 out.edits.push(Edit::new(span.start, span.end, ""));
             }
             Statement::ExportNamedDeclaration(_)
+            | Statement::ExportDeclaration(_)
+            | Statement::ExportFromDeclaration(_)
             | Statement::ExportDefaultDeclaration(_)
             | Statement::ExportAllDeclaration(_) => errors.push((
                 span,
-                "export v (<extruderInitialization>) nedává smysl, sdílený kód dej do .ts souboru".into(),
+                "z (<extruderInitialization>) jde exportovat jen `entries` (parametry pro SSG), sdílený kód dej do .ts souboru".into(),
             )),
             Statement::VariableDeclaration(v) => {
                 let Some(g) = decl_at.get(&(v.span.start as usize)) else { continue };
@@ -120,6 +117,13 @@ pub fn analyze(
                 let Some(symbol) = id.symbol_id.get() else { continue };
                 reactive.insert(symbol, g.kind);
                 let name = id.name.as_str();
+                if g.rest {
+                    rest_decl = Some((v.span.start, d.span.end, name.to_string()));
+                    continue;
+                }
+                if g.kind == DeclKind::Prop {
+                    prop_names.push(name.to_string());
+                }
                 let generic = d
                     .type_annotation
                     .as_ref()
@@ -129,7 +133,6 @@ pub fn analyze(
                     (DeclKind::State, Some(init)) => {
                         wrap(&mut out.edits, v.span, init.span(), format!("const {name} = __f.signal{generic}("), ")")
                     }
-                    // Konec deklarátoru, ne celé deklarace: ta může spolknout `;` za hranicí setupu.
                     (DeclKind::State, None) => out.edits.push(Edit::new(
                         v.span.start,
                         d.span.end,
@@ -165,11 +168,17 @@ pub fn analyze(
         }
     }
 
-    // Položky z (<each>) jsou signály: najdeme jejich symboly podle pozice v projekci.
-    let each_at: HashSet<u32> = tpl.each_items.iter().map(|p| *p as u32).collect();
     for symbol in scoping.symbol_ids() {
-        if each_at.contains(&scoping.symbol_span(symbol).start) {
+        let at = scoping.symbol_span(symbol).start as usize;
+        if tpl.locals.contains(&at) {
+            reactive.insert(symbol, DeclKind::Derived);
+            continue;
+        }
+        if tpl.each_items.iter().any(|&(s, e)| at >= s && at < e) {
             reactive.insert(symbol, DeclKind::EachItem);
+            if let Some((s, _)) = tpl.each_patterns.values().find(|&&(s, e)| at >= s && at < e) {
+                out.each_names.entry(*s).or_default().push(scoping.symbol_name(symbol).to_string());
+            }
         }
     }
 
@@ -181,6 +190,15 @@ pub fn analyze(
                     .with_help(format!("přidej do (<extruderInitialization>): import {name} from \"./{name}.fs\"")),
             );
         }
+    }
+
+    if let Some((start, end, name)) = rest_decl {
+        let names: Vec<String> = prop_names.iter().map(|n| format!("{n:?}")).collect();
+        out.edits.push(Edit::new(
+            start,
+            end,
+            format!("const {name} = __f.computed(() => __f.rest(__props, [{}]))", names.join(", ")),
+        ));
     }
 
     for g in &setup.decls {
@@ -205,18 +223,16 @@ pub fn analyze(
     out
 }
 
-/// `[stmt.start, inner.start)` → `open`, za `inner` se vloží `close`.
 fn wrap(edits: &mut Vec<Edit>, stmt: Span, inner: Span, open: String, close: &str) {
     edits.push(Edit::new(stmt.start, inner.start, open));
     edits.push(Edit::new(inner.end, inner.end, close));
 }
 
-/// Aplikuje úpravy v rozsahu `[start, end)` projekce.
 pub fn apply(text: &str, edits: &[Edit], start: usize, end: usize) -> String {
     let mut out = String::with_capacity(end - start);
     let mut pos = start;
     for e in edits.iter().filter(|e| e.start >= start && e.start < end || e.start == end && e.end == end) {
-        // Úprava přes hranici rozsahu by se jinak potichu ztratila (a vznikl by špatný kód).
+        // Úprava přes hranici by se jinak potichu ztratila.
         assert!(e.end <= end, "úprava přesahuje rozsah {start}..{end}: {e:?}");
         if e.start < pos {
             debug_assert!(false, "překrývající se úpravy: {e:?}");
@@ -243,6 +259,41 @@ fn from_oxc(e: &oxc::diagnostics::OxcDiagnostic, proj: &Projection) -> Diagnosti
     d
 }
 
+fn exports_entries(e: &ExportDeclaration) -> bool {
+    match &e.declaration {
+        Declaration::FunctionDeclaration(f) => f.id.as_ref().is_some_and(|id| id.name == "entries"),
+        Declaration::VariableDeclaration(v) => v.declarations.iter().all(|d| {
+            matches!(&d.id, BindingPattern::BindingIdentifier(id) if id.name == "entries")
+        }),
+        _ => false,
+    }
+}
+
+fn member_root<'b, 'a>(e: &'b Expression<'a>) -> Option<&'b IdentifierReference<'a>> {
+    match e {
+        Expression::Identifier(id) => Some(id),
+        Expression::StaticMemberExpression(m) => member_root(&m.object),
+        Expression::ComputedMemberExpression(m) => member_root(&m.object),
+        _ => None,
+    }
+}
+
+fn target_root<'b, 'a>(t: &'b AssignmentTarget<'a>) -> Option<&'b IdentifierReference<'a>> {
+    match t {
+        AssignmentTarget::StaticMemberExpression(m) => member_root(&m.object),
+        AssignmentTarget::ComputedMemberExpression(m) => member_root(&m.object),
+        _ => None,
+    }
+}
+
+fn simple_target_root<'b, 'a>(t: &'b SimpleAssignmentTarget<'a>) -> Option<&'b IdentifierReference<'a>> {
+    match t {
+        SimpleAssignmentTarget::StaticMemberExpression(m) => member_root(&m.object),
+        SimpleAssignmentTarget::ComputedMemberExpression(m) => member_root(&m.object),
+        _ => None,
+    }
+}
+
 struct Rewriter<'s> {
     scoping: &'s Scoping,
     reactive: &'s HashMap<SymbolId, DeclKind>,
@@ -257,6 +308,19 @@ impl Rewriter<'_> {
         self.reactive.get(&reference.symbol_id()?).copied()
     }
 
+    /// `form.email = v` na M104 → `__f.mutate(form, () => (form.get().email = v))`.
+    fn mutation(&mut self, root: &IdentifierReference, span: Span, walk: impl FnOnce(&mut Self)) {
+        match self.kind(root) {
+            Some(DeclKind::State) => {
+                self.edits.push(Edit::new(span.start, span.start, format!("__f.mutate({}, () => (", root.name)));
+                self.edits.push(Edit::new(span.end, span.end, "))"));
+            }
+            Some(kind) => return self.read_only(root, kind),
+            None => {}
+        }
+        walk(self);
+    }
+
     fn read_only(&mut self, id: &IdentifierReference, kind: DeclKind) {
         let what = match kind {
             DeclKind::Prop => "prop (M98) se nedá přepsat, je jen pro čtení",
@@ -269,7 +333,7 @@ impl Rewriter<'_> {
 }
 
 impl<'a> Visit<'a> for Rewriter<'_> {
-    // Typy nepřepisujeme (`typeof filter` v typu musí zůstat).
+    // Typy se nepřepisují (`typeof x` v typu musí zůstat).
     fn visit_ts_type(&mut self, _: &TSType<'a>) {}
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
@@ -297,6 +361,9 @@ impl<'a> Visit<'a> for Rewriter<'_> {
     }
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let Some(root) = target_root(&it.left) {
+            return self.mutation(root, it.span, |v| walk::walk_assignment_expression(v, it));
+        }
         let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left else {
             return walk::walk_assignment_expression(self, it);
         };
@@ -326,6 +393,9 @@ impl<'a> Visit<'a> for Rewriter<'_> {
     }
 
     fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
+        if let Some(root) = simple_target_root(&it.argument) {
+            return self.mutation(root, it.span, |v| walk::walk_update_expression(v, it));
+        }
         let SimpleAssignmentTarget::AssignmentTargetIdentifier(id) = &it.argument else {
             return walk::walk_update_expression(self, it);
         };
@@ -341,30 +411,39 @@ impl<'a> Visit<'a> for Rewriter<'_> {
     }
 
     fn visit_labeled_statement(&mut self, it: &LabeledStatement<'a>) {
-        let body = it.body.span();
-        let (open, close) = match it.label.name.as_str() {
-            "M106" => ("__f.userEffect(() => ", ");"),
-            "M107" => ("__f.onDestroy(() => ", ");"),
-            "M600" => ("__f.transition(() => ", ");"),
+        let open = match it.label.name.as_str() {
+            "M106" => Some("__f.userEffect("),
+            "M107" => Some("__f.onDestroy("),
+            "M600" => Some("__f.transition("),
+            _ => None,
+        };
+        if let (Some(open), Statement::ExpressionStatement(e)) = (open, &it.body) {
+            let arrow = e.expression.span();
+            self.edits.push(Edit::new(it.span.start, arrow.start, open));
+            self.edits.push(Edit::new(arrow.end, arrow.end, ")"));
+            self.visit_expression(&e.expression);
+            return;
+        }
+        match it.label.name.as_str() {
+            "M141" => {
+                let Statement::ExpressionStatement(e) = &it.body else { return };
+                self.edits.push(Edit::new(it.span.start, e.expression.span().start, ""));
+                self.visit_expression(&e.expression);
+            }
             "M117" => {
                 let Statement::ExpressionStatement(e) = &it.body else {
                     return walk::walk_labeled_statement(self, it);
                 };
                 let expr = e.expression.span();
                 if !self.dev {
-                    // M117 je jen pro vývoj, v produkci se vystřihne.
                     self.edits.push(Edit::new(it.span.start, expr.end, ""));
                     return;
                 }
                 self.edits.push(Edit::new(it.span.start, expr.start, "console.debug("));
                 self.edits.push(Edit::new(expr.end, expr.end, ")"));
                 self.visit_expression(&e.expression);
-                return;
             }
-            _ => return walk::walk_labeled_statement(self, it),
-        };
-        self.edits.push(Edit::new(it.span.start, body.start, open));
-        self.edits.push(Edit::new(body.end, it.span.end, close));
-        self.visit_statement(&it.body);
+            _ => walk::walk_labeled_statement(self, it),
+        }
     }
 }

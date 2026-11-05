@@ -1,14 +1,14 @@
 use futuscript_slicer::{Options, render, slice};
 
 fn ok(src: &str) -> String {
-    match slice(src, &Options { filename: "Test.fs", dev: true }) {
+    match slice(src, &Options { filename: "Test.fs", dev: true, server: false }) {
         Ok(js) => js,
         Err(d) => panic!("{}", render(&d, src, "Test.fs")),
     }
 }
 
 fn err(src: &str) -> String {
-    match slice(src, &Options { filename: "Test.fs", dev: true }) {
+    match slice(src, &Options { filename: "Test.fs", dev: true, server: false }) {
         Ok(js) => panic!("čekal jsem chybu, vyšlo:\n{js}"),
         Err(d) => render(&d, src, "Test.fs"),
     }
@@ -17,7 +17,7 @@ fn err(src: &str) -> String {
 #[test]
 fn counter_example() {
     let src = include_str!("../../../examples/Counter.fs");
-    let js = slice(src, &Options { filename: "Counter.fs", dev: true }).unwrap();
+    let js = slice(src, &Options { filename: "Counter.fs", dev: true, server: false }).unwrap();
     insta::assert_snapshot!(js);
 }
 
@@ -54,13 +54,12 @@ fn compound_assignments_and_types() {
 
 #[test]
 fn last_setup_line_without_semicolon() {
-    // Oxc připojí k poslední deklaraci i `;` za hranicí setupu, úprava se nesmí ztratit.
     let js = ok("(<extruderInitialization>)\n  M98 ontoggle: () => void\n(</extruderInitialization>)\n");
     assert!(js.contains("const ontoggle = __f.computed(() => __props.ontoggle)"), "{js}");
     let js = ok("(<extruderInitialization>)\n  M104 x: number\n(</extruderInitialization>)\n");
     assert!(js.contains("const x = __f.signal(undefined)"), "{js}");
     let src = "(<extruderInitialization>)\n  M104 a = 1\n  M117 a\n(</extruderInitialization>)\n";
-    let prod = slice(src, &Options { filename: "T.fs", dev: false }).unwrap();
+    let prod = slice(src, &Options { filename: "T.fs", dev: false, server: false }).unwrap();
     assert!(!prod.contains("M117") && !prod.contains("console"), "{prod}");
 }
 
@@ -74,13 +73,13 @@ fn postfix_update_returns_old_value() {
 #[test]
 fn todo_example() {
     let src = include_str!("../../../examples/Todo.fs");
-    insta::assert_snapshot!(slice(src, &Options { filename: "Todo.fs", dev: true }).unwrap());
+    insta::assert_snapshot!(slice(src, &Options { filename: "Todo.fs", dev: true, server: false }).unwrap());
 }
 
 #[test]
 fn todo_item_example() {
     let src = include_str!("../../../examples/TodoItem.fs");
-    insta::assert_snapshot!(slice(src, &Options { filename: "TodoItem.fs", dev: true }).unwrap());
+    insta::assert_snapshot!(slice(src, &Options { filename: "TodoItem.fs", dev: true, server: false }).unwrap());
 }
 
 #[test]
@@ -95,14 +94,26 @@ fn error_write_to_each_item() {
 }
 
 #[test]
-fn error_each_destructuring() {
-    insta::assert_snapshot!(err("(<extrusion>)\n  (<each> {id} of xs )\n  (</each>)\n(</extrusion>)\n"));
+fn each_destructuring() {
+    let js = ok("(<extrusion>)\n  (<each> { id, text: label }, i of xs by id )\n    <p>{id} {label} {i}</p>\n  (</each>)\n(</extrusion>)\n");
+    assert!(js.contains("const id = __f.computed(() => {"), "{js}");
+    assert!(js.contains("const label = __f.computed(() => {"), "{js}");
+    assert!(js.contains("label.get()"), "{js}");
+    assert!(js.contains("({ id, text: label }, i) => id"), "{js}");
+}
+
+#[test]
+fn effect_can_return_cleanup_and_last_import() {
+    let js = ok("(<extruderInitialization>)\n  M104 a = 1\n  M106 {\n    const id = setInterval(() => a++, 10)\n    return () => clearInterval(id)\n  }\n  import X from \"./X.fs\"\n(</extruderInitialization>)\n(<extrusion>)\n  <X />\n(</extrusion>)\n");
+    assert!(js.contains("__f.userEffect(() => {"), "{js}");
+    assert!(js.contains("return () => clearInterval(id)"), "{js}");
+    assert!(js.contains("import X from \"./X.fs\""), "{js}");
 }
 
 #[test]
 fn m117_is_stripped_in_prod() {
     let src = "(<extruderInitialization>)\n  M104 a = 1\n  M117 a\n(</extruderInitialization>)\n";
-    let prod = slice(src, &Options { filename: "T.fs", dev: false }).unwrap();
+    let prod = slice(src, &Options { filename: "T.fs", dev: false, server: false }).unwrap();
     assert!(!prod.contains("console.debug"), "{prod}");
     assert!(ok(src).contains("console.debug(a.get())"));
 }
@@ -145,4 +156,45 @@ fn error_typescript_syntax_maps_to_source() {
     let src = "(<extruderInitialization>)\n  M104 a = = 1\n(</extruderInitialization>)\n";
     let out = err(src);
     assert!(out.starts_with("Spaghetti v Test.fs:2:"), "{out}");
+}
+
+#[test]
+fn error_infill_outside_component() {
+    insta::assert_snapshot!(err("(<extrusion>)\n  <div>\n    (<infill> header )\n    (</infill>)\n  </div>\n(</extrusion>)\n"));
+}
+
+#[test]
+fn error_context_without_value() {
+    insta::assert_snapshot!(err("(<extruderInitialization>)\n  M141 Theme\n(</extruderInitialization>)\n"));
+}
+
+#[test]
+fn svg_children_use_namespace() {
+    let js = ok("(<extrusion>)\n  <svg viewBox=\"0 0 1 1\"><path d=\"M0 0\" /><foreignObject><div>x</div></foreignObject></svg>\n(</extrusion>)\n");
+    assert!(js.contains(", \"path\")") && js.contains("__f.svg(__n1, \"path\")"), "{js}");
+    assert!(js.contains("__f.svg(__n1, \"foreignObject\")"), "{js}");
+    assert!(js.contains("__f.el(__n3, \"div\")"), "{js}");
+}
+
+#[test]
+fn member_mutation_notifies() {
+    let js = ok("(<extruderInitialization>)\n  M104 form = { a: 1, list: [] as number[] }\n  function f() { form.a = 2; form.list[0] += 1 }\n(</extruderInitialization>)\n");
+    assert!(js.contains("__f.mutate(form, () => form.get().a = 2)"), "{js}");
+    assert!(js.contains("__f.mutate(form, () => form.get().list[0] += 1)"), "{js}");
+}
+
+#[test]
+fn error_mutate_prop() {
+    insta::assert_snapshot!(err("(<extruderInitialization>)\n  M98 user: { name: string }\n  function f() { user.name = \"x\" }\n(</extruderInitialization>)\n"));
+}
+
+#[test]
+fn error_write_local_derived() {
+    insta::assert_snapshot!(err("(<extrusion>)\n  (<each> t of [1, 2] )\n    M105 big = t > 1\n    <button onclick={() => (big = false)}>{big}</button>\n  (</each>)\n(</extrusion>)\n"));
+}
+
+#[test]
+fn server_output() {
+    let src = include_str!("../../../examples/Todo.fs");
+    insta::assert_snapshot!(slice(src, &Options { filename: "Todo.fs", dev: true, server: true }).unwrap());
 }

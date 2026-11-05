@@ -1,5 +1,3 @@
-//! Parser šablony `(<extrusion>)`: HTML + `{výraz}` + řádkové instrukce `(<if> … )`.
-
 use std::collections::HashMap;
 
 use crate::blocks::TOP;
@@ -11,7 +9,6 @@ use crate::suggest;
 
 pub type ExprId = usize;
 
-/// JS výraz ze šablony, rozsah ve zdroji.
 #[derive(Debug, Clone, Copy)]
 pub struct Expr {
     pub start: usize,
@@ -22,8 +19,9 @@ pub struct Expr {
 pub enum AttrValue {
     Static(String),
     Expr(ExprId),
-    /// `<input disabled>`
     Bool,
+    Spread(ExprId),
+    Use { action: ExprId, params: Option<ExprId> },
 }
 
 #[derive(Debug)]
@@ -38,15 +36,23 @@ pub enum Node {
     Element { tag: String, attrs: Vec<Attr>, children: Vec<Node> },
     Text(String),
     Expr(ExprId),
-    /// Větve `if`/`elseif`/`else`. `None` = `else`.
     If { branches: Vec<(Option<ExprId>, Vec<Node>)> },
-    /// `(<each> item, index of iter by key )` … `(<empty>)` … `(</each>)`
     Each { head: EachHead, children: Vec<Node>, empty: Option<Vec<Node>> },
-    /// `<TodoItem {todo} />`
-    Component { name: String, attrs: Vec<Attr>, span: (usize, usize) },
+    Component {
+        name: String,
+        attrs: Vec<Attr>,
+        span: (usize, usize),
+        infill: Vec<Node>,
+        named: Vec<(String, Vec<Node>)>,
+    },
+    Macro { name: Binding, params: Option<(usize, usize)>, children: Vec<Node> },
+    Listen { target: &'static str, attrs: Vec<Attr> },
+    Portal { target: Option<ExprId>, children: Vec<Node> },
+    Local { name: Binding, ty: Option<(usize, usize)>, expr: ExprId },
+    Head { children: Vec<Node> },
+    Match { subject: ExprId, cases: Vec<(Option<ExprId>, Vec<Node>)> },
 }
 
-/// Jméno proměnné a jeho pozice ve zdroji.
 #[derive(Debug, Clone)]
 pub struct Binding {
     pub name: String,
@@ -72,26 +78,37 @@ const VOID: &[&str] =
 
 const INSTRUCTIONS: &[&str] = &[
     "if", "elseif", "else", "each", "empty", "match", "case", "default", "layer", "pending", "catch", "infill",
-    "macro", "head", "window", "document", "procedureDone",
+    "macro", "head", "window", "document", "portal", "procedureDone",
 ];
 
-/// Instrukce, které jsou v návrhu, ale Slicer je ještě neumí.
-const LATER_BLOCKS: &[(&str, &str)] = &[
-    ("match", "brzy"),
-    ("layer", "ve fázi 2"),
-    ("infill", "brzy"),
-    ("macro", "brzy"),
-    ("head", "ve fázi 2"),
-];
-const LATER_SEPARATORS: &[&str] = &["case", "default", "pending", "catch"];
+const LATER_BLOCKS: &[(&str, &str)] = &[("layer", "ve fázi 2")];
+const LATER_SEPARATORS: &[&str] = &["pending", "catch"];
+
+#[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
+enum Case {
+    Pre,
+    Case(ExprId),
+    Default,
+}
 
 enum Frame {
     Root(Vec<Node>),
     Element { tag: String, attrs: Vec<Attr>, children: Vec<Node>, span: (usize, usize) },
     If { branches: Vec<(Option<ExprId>, Vec<Node>)>, span: (usize, usize), has_else: bool },
     Each { head: EachHead, children: Vec<Node>, empty: Option<Vec<Node>>, span: (usize, usize) },
-    Component { name: String, attrs: Vec<Attr>, children: Vec<Node>, span: (usize, usize) },
-    /// Instrukce, kterou zatím neumíme. Obsah zahodíme, chyba už je nahlášená.
+    Component {
+        name: String,
+        attrs: Vec<Attr>,
+        children: Vec<Node>,
+        named: Vec<(String, Vec<Node>)>,
+        span: (usize, usize),
+    },
+    Infill { name: String, children: Vec<Node>, span: (usize, usize) },
+    Macro { name: Binding, params: Option<(usize, usize)>, children: Vec<Node>, span: (usize, usize) },
+    Portal { target: Option<ExprId>, children: Vec<Node>, span: (usize, usize) },
+    Head { children: Vec<Node>, span: (usize, usize) },
+    Match { subject: ExprId, cases: Vec<(Case, Vec<Node>)>, span: (usize, usize) },
     Later { name: String, children: Vec<Node> },
 }
 
@@ -162,6 +179,16 @@ impl Parser<'_, '_> {
                     Diagnostic::new(format!("<{name}> není uzavřená", ), span.0, span.1)
                         .with_help(format!("přidej </{name}> nebo napiš <{name} />"))
                 }
+                Frame::Infill { span, .. } => Diagnostic::new("(<infill>) není uzavřený", span.0, span.1)
+                    .with_help("přidej (</infill>)"),
+                Frame::Macro { span, .. } => Diagnostic::new("(<macro>) není uzavřené", span.0, span.1)
+                    .with_help("přidej (</macro>)"),
+                Frame::Portal { span, .. } => Diagnostic::new("(<portal>) není uzavřený", span.0, span.1)
+                    .with_help("přidej (</portal>)"),
+                Frame::Head { span, .. } => Diagnostic::new("(<head>) není uzavřený", span.0, span.1)
+                    .with_help("přidej (</head>)"),
+                Frame::Match { span, .. } => Diagnostic::new("(<match>) není uzavřený", span.0, span.1)
+                    .with_help("přidej (</match>)"),
                 Frame::Later { .. } | Frame::Root(_) => continue,
             };
             self.diags.push(d);
@@ -182,7 +209,12 @@ impl Parser<'_, '_> {
             Frame::Root(c)
             | Frame::Element { children: c, .. }
             | Frame::Component { children: c, .. }
+            | Frame::Infill { children: c, .. }
+            | Frame::Macro { children: c, .. }
+            | Frame::Portal { children: c, .. }
+            | Frame::Head { children: c, .. }
             | Frame::Later { children: c, .. } => c,
+            Frame::Match { cases, .. } => &mut cases.last_mut().expect("match case").1,
             Frame::If { branches, .. } => &mut branches.last_mut().expect("if branch").1,
             Frame::Each { empty: Some(c), .. } | Frame::Each { children: c, .. } => c,
         }
@@ -208,7 +240,6 @@ impl Parser<'_, '_> {
         self.exprs.len() - 1
     }
 
-    /// Řádek začínající instrukcí, escapem `\(<` nebo G-kódem. Vrací `true`, pokud řádek zpracoval.
     fn line_directive(&mut self) -> bool {
         let line_end = self.src[self.pos..self.end].find('\n').map_or(self.end, |i| self.pos + i);
         let line = self.src[self.pos..line_end].trim_end_matches('\r');
@@ -227,15 +258,42 @@ impl Parser<'_, '_> {
             return true;
         }
         if let Some(g) = gcode_prefix(t.trim_end()) {
-            self.diags.push(Diagnostic::new(
-                "G-kódy v šabloně (lokální M105 v každé položce) zatím Slicer neumí",
-                t_start,
-                t_start + g.len,
-            ));
+            let code_end = t_start + g.len;
+            if g.code != "M105" || g.module {
+                self.diags.push(
+                    Diagnostic::new("v šabloně smí být jen lokální M105", t_start, code_end)
+                        .with_help("M105 overdue = todo.due < now"),
+                );
+            } else {
+                self.local(&t[g.len..], code_end, (t_start, code_end));
+            }
             self.pos = next;
             return true;
         }
         false
+    }
+
+    fn local(&mut self, rest: &str, at: usize, code: (usize, usize)) {
+        let rest = strip_line_comment(rest);
+        let lead = rest.len() - rest.trim_start().len();
+        let decl = rest.trim();
+        let start = at + lead;
+        let name_len = decl.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).unwrap_or(decl.len());
+        let Some(eq) = find_assign(decl) else {
+            return self.diags.push(Diagnostic::new("M105 potřebuje výraz", code.0, code.1).with_help("M105 overdue = todo.due < now"));
+        };
+        let between = decl[name_len..eq].trim();
+        if name_len == 0 || !(between.is_empty() || between.starts_with(':')) {
+            return self.diags.push(Diagnostic::new("za M105 čekám `jméno = výraz`", code.0, code.1));
+        }
+        let ty = between.strip_prefix(':').map(|t| {
+            let t = t.trim();
+            let s = start + decl[..eq].find(t).unwrap_or(name_len);
+            (s, s + t.len())
+        });
+        let name = Binding { name: decl[..name_len].to_string(), pos: start };
+        let expr = self.add_expr(start + eq + 1, start + decl.len());
+        self.push(Node::Local { name, ty, expr });
     }
 
     fn instruction(&mut self, t: &str, t_start: usize) {
@@ -324,6 +382,141 @@ impl Parser<'_, '_> {
                 }
                 None => unreachable!(),
             },
+            (Kind::Open, "infill") => {
+                if !matches!(self.stack.last(), Some(Frame::Component { .. })) {
+                    self.diags.push(
+                        Diagnostic::new("(<infill>) patří přímo dovnitř komponenty", name_span.0, name_span.1)
+                            .with_help("<Card> (<infill> header ) … (</infill>) </Card>"),
+                    );
+                    return self.stack.push(Frame::Later { name: "infill".into(), children: Vec::new() });
+                }
+                if !is_ident(instr.args) {
+                    return self.diags.push(
+                        Diagnostic::new("(<infill>) čeká jméno slotu", name_span.0, name_span.1)
+                            .with_help("(<infill> header )"),
+                    );
+                }
+                self.stack.push(Frame::Infill { name: instr.args.to_string(), children: Vec::new(), span: name_span });
+            }
+            (Kind::Close, "infill") => match self.stack.pop() {
+                Some(Frame::Infill { name, children, .. }) => {
+                    let Some(Frame::Component { named, .. }) = self.stack.last_mut() else { unreachable!() };
+                    named.push((name, children));
+                }
+                Some(Frame::Later { name, .. }) if name == "infill" => {}
+                Some(other) => {
+                    let d = mismatch(&other, "(</infill>)", name_span);
+                    self.stack.push(other);
+                    self.fail(d);
+                }
+                None => unreachable!(),
+            },
+            (Kind::Open, "macro") => {
+                let name_len = instr.args.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$')).unwrap_or(instr.args.len());
+                let name = &instr.args[..name_len];
+                let rest = instr.args[name_len..].trim();
+                if !is_ident(name) || !(rest.is_empty() || rest.starts_with('(') && rest.ends_with(')')) {
+                    return self.diags.push(
+                        Diagnostic::new("(<macro>) čeká jméno a případně parametry", name_span.0, name_span.1)
+                            .with_help("(<macro> row(item: Todo) )"),
+                    );
+                }
+                let params = (!rest.is_empty()).then(|| {
+                    let open = instr.args_start + instr.args.find('(').unwrap() + 1;
+                    let close = instr.args_start + instr.args.rfind(')').unwrap();
+                    (open, close)
+                });
+                let name = Binding { name: name.to_string(), pos: instr.args_start };
+                self.stack.push(Frame::Macro { name, params, children: Vec::new(), span: name_span });
+            }
+            (Kind::Close, "macro") => match self.stack.pop() {
+                Some(Frame::Macro { name, params, children, .. }) => self.push(Node::Macro { name, params, children }),
+                Some(other) => {
+                    let d = mismatch(&other, "(</macro>)", name_span);
+                    self.stack.push(other);
+                    self.fail(d);
+                }
+                None => unreachable!(),
+            },
+            (Kind::Open, "head") => self.stack.push(Frame::Head { children: Vec::new(), span: name_span }),
+            (Kind::Close, "head") => match self.stack.pop() {
+                Some(Frame::Head { children, .. }) => self.push(Node::Head { children }),
+                Some(other) => {
+                    let d = mismatch(&other, "(</head>)", name_span);
+                    self.stack.push(other);
+                    self.fail(d);
+                }
+                None => unreachable!(),
+            },
+            (Kind::Open, "portal") => {
+                let target = (!instr.args.is_empty()).then(|| args_expr(self));
+                self.stack.push(Frame::Portal { target, children: Vec::new(), span: name_span });
+            }
+            (Kind::Close, "portal") => match self.stack.pop() {
+                Some(Frame::Portal { target, children, .. }) => self.push(Node::Portal { target, children }),
+                Some(other) => {
+                    let d = mismatch(&other, "(</portal>)", name_span);
+                    self.stack.push(other);
+                    self.fail(d);
+                }
+                None => unreachable!(),
+            },
+            (Kind::Open, "match") => {
+                let subject = args_expr(self);
+                self.stack.push(Frame::Match { subject, cases: vec![(Case::Pre, Vec::new())], span: name_span });
+            }
+            (Kind::Open, name @ ("case" | "default")) => {
+                if !matches!(self.stack.last(), Some(Frame::Match { .. })) {
+                    return self.diags.push(Diagnostic::new(format!("(<{name}>) patří do (<match>)"), name_span.0, name_span.1));
+                }
+                let case = if name == "case" { Case::Case(args_expr(self)) } else { Case::Default };
+                let Some(Frame::Match { cases, .. }) = self.stack.last_mut() else { unreachable!() };
+                if cases.iter().any(|(c, _)| matches!(c, Case::Default)) {
+                    self.diags.push(Diagnostic::new("za (<default>) už nic dalšího", name_span.0, name_span.1));
+                }
+                cases.push((case, Vec::new()));
+            }
+            (Kind::Close, "match") => match self.stack.pop() {
+                Some(Frame::Match { subject, cases, span }) => {
+                    let mut out = Vec::new();
+                    for (case, children) in cases {
+                        match case {
+                            Case::Pre => {
+                                if children.iter().any(|c| !matches!(c, Node::Text(t) if t.trim().is_empty())) {
+                                    self.diags.push(Diagnostic::new("obsah (<match>) musí být v (<case>)", span.0, span.1));
+                                }
+                            }
+                            Case::Case(id) => out.push((Some(id), children)),
+                            Case::Default => out.push((None, children)),
+                        }
+                    }
+                    self.push(Node::Match { subject, cases: out });
+                }
+                Some(other) => {
+                    let d = mismatch(&other, "(</match>)", name_span);
+                    self.stack.push(other);
+                    self.fail(d);
+                }
+                None => unreachable!(),
+            },
+            (Kind::Standalone, name @ ("window" | "document")) => {
+                let target = if name == "window" { "window" } else { "document" };
+                let (pos, end) = (self.pos, self.end);
+                self.pos = instr.args_start;
+                self.end = instr.args_start + instr.args.len();
+                let attrs = self.attr_list(name);
+                self.pos = pos;
+                self.end = end;
+                let Some(attrs) = attrs else { return };
+                for a in &attrs {
+                    if !(a.name.len() > 2 && a.name.starts_with("on") && matches!(a.value, AttrValue::Expr(_))) {
+                        self.diags.push(
+                            Diagnostic::new(format!("(<{name}>) bere jen eventy, třeba onkeydown={{h}}"), a.span.0, a.span.1),
+                        );
+                    }
+                }
+                self.push(Node::Listen { target, attrs });
+            }
             (Kind::Close, "if") => match self.stack.pop() {
                 Some(Frame::If { branches, .. }) => self.push(Node::If { branches }),
                 Some(other) => {
@@ -360,11 +553,10 @@ impl Parser<'_, '_> {
                     ));
                 }
             }
-            (_, name @ ("window" | "document")) => self.diags.push(Diagnostic::new(
-                format!("(<{name}>) zatím Slicer neumí"),
-                name_span.0,
-                name_span.1,
-            )),
+            (_, name @ ("window" | "document")) => self.diags.push(
+                Diagnostic::new(format!("(<{name}>) je samostatná instrukce"), name_span.0, name_span.1)
+                    .with_help(format!("(<{name}> onkeydown={{handleKey}} </{name}>)")),
+            ),
             (_, name) if TOP.contains(&name) => self.diags.push(Diagnostic::new(
                 format!("(<{name}>) je top-level blok, nemůže být uvnitř (<extrusion>)"),
                 name_span.0,
@@ -395,55 +587,17 @@ impl Parser<'_, '_> {
         self.pos += 1;
         let tag = self.read_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | ':' | '.')).to_string();
         let span = (lt + 1, lt + 1 + tag.len());
-        let mut attrs = Vec::new();
-        let self_closing;
-        loop {
-            self.skip_ws();
-            let rest = &self.src[self.pos..self.end];
-            if rest.is_empty() {
-                return self.fail(Diagnostic::new(format!("<{tag}> není dokončený, chybí `>`"), span.0, span.1));
-            }
-            if rest.starts_with("/>") {
-                self.pos += 2;
-                self_closing = true;
-                break;
-            }
-            if rest.starts_with('>') {
-                self.pos += 1;
-                self_closing = false;
-                break;
-            }
-            if rest.starts_with('{') {
-                if !self.shorthand_attr(&mut attrs) {
-                    return;
-                }
-                continue;
-            }
-            let name_start = self.pos;
-            let name =
-                self.read_while(|c| !c.is_whitespace() && !matches!(c, '=' | '>' | '/' | '{' | '"' | '\'')).to_string();
-            if name.is_empty() {
-                let c = rest.chars().next().unwrap();
-                return self.fail(Diagnostic::new(
-                    format!("nečekaný znak `{c}` v <{tag}>"),
-                    self.pos,
-                    self.pos + c.len_utf8(),
-                ));
-            }
-            let span = (name_start, self.pos);
-            self.skip_ws();
-            let value = if self.src[self.pos..self.end].starts_with('=') {
-                self.pos += 1;
-                self.skip_ws();
-                match self.attr_value() {
-                    Some(v) => v,
-                    None => return,
-                }
-            } else {
-                AttrValue::Bool
-            };
-            attrs.push(Attr { name, span, value });
-        }
+        let Some(attrs) = self.attr_list(&tag) else { return };
+        let rest = &self.src[self.pos..self.end];
+        let self_closing = if rest.starts_with("/>") {
+            self.pos += 2;
+            true
+        } else if rest.starts_with('>') {
+            self.pos += 1;
+            false
+        } else {
+            return self.fail(Diagnostic::new(format!("<{tag}> není dokončený, chybí `>`"), span.0, span.1));
+        };
 
         match tag.as_str() {
             "style" => {
@@ -461,9 +615,9 @@ impl Parser<'_, '_> {
                 }
             }
             if self_closing {
-                self.push(Node::Component { name: tag, attrs, span });
+                self.push(Node::Component { name: tag, attrs, span, infill: Vec::new(), named: Vec::new() });
             } else {
-                self.stack.push(Frame::Component { name: tag, attrs, children: Vec::new(), span });
+                self.stack.push(Frame::Component { name: tag, attrs, children: Vec::new(), named: Vec::new(), span });
             }
             return;
         }
@@ -477,10 +631,60 @@ impl Parser<'_, '_> {
         }
     }
 
+    fn attr_list(&mut self, tag: &str) -> Option<Vec<Attr>> {
+        let mut attrs = Vec::new();
+        loop {
+            self.skip_ws();
+            let rest = &self.src[self.pos..self.end];
+            if rest.is_empty() || rest.starts_with("/>") || rest.starts_with('>') {
+                return Some(attrs);
+            }
+            if rest.starts_with('{') {
+                if !self.shorthand_attr(&mut attrs) {
+                    return None;
+                }
+                continue;
+            }
+            let name_start = self.pos;
+            let name =
+                self.read_while(|c| !c.is_whitespace() && !matches!(c, '=' | '>' | '/' | '{' | '"' | '\'')).to_string();
+            if name.is_empty() {
+                let c = rest.chars().next().unwrap();
+                self.fail(Diagnostic::new(format!("nečekaný znak `{c}` v <{tag}>"), self.pos, self.pos + c.len_utf8()));
+                return None;
+            }
+            let span = (name_start, self.pos);
+            self.skip_ws();
+            let mut value = if self.src[self.pos..self.end].starts_with('=') {
+                self.pos += 1;
+                self.skip_ws();
+                self.attr_value()?
+            } else {
+                AttrValue::Bool
+            };
+            if let Some(action) = name.strip_prefix("use:") {
+                if !is_ident(action) {
+                    self.diags.push(Diagnostic::new("`use:` čeká jméno funkce akce", span.0, span.1).with_help("use:magnetic"));
+                    continue;
+                }
+                let action_id = self.add_expr(name_start + 4, span.1);
+                value = match value {
+                    AttrValue::Expr(id) => AttrValue::Use { action: action_id, params: Some(id) },
+                    AttrValue::Bool => AttrValue::Use { action: action_id, params: None },
+                    _ => {
+                        self.diags.push(Diagnostic::new("parametry akce piš jako výraz: use:x={…}", span.0, span.1));
+                        continue;
+                    }
+                };
+            }
+            attrs.push(Attr { name, span, value });
+        }
+    }
+
     fn check_bind(&mut self, a: &Attr) {
         let Some(what) = a.name.strip_prefix("bind:") else { return };
-        if !matches!(what, "value" | "checked") {
-            self.diags.push(Diagnostic::new(format!("`bind:{what}` zatím Slicer neumí, jen bind:value a bind:checked"), a.span.0, a.span.1));
+        if !matches!(what, "value" | "checked" | "group" | "this") {
+            self.diags.push(Diagnostic::new(format!("`bind:{what}` zatím Slicer neumí, jen bind:value, bind:checked, bind:group a bind:this"), a.span.0, a.span.1));
             return;
         }
         let AttrValue::Expr(id) = a.value else {
@@ -492,15 +696,14 @@ impl Parser<'_, '_> {
         };
         let e = self.exprs[id];
         let target = &self.src[e.start..e.end];
-        if !is_ident(target) {
+        if !is_path(target) {
             self.diags.push(
-                Diagnostic::new(format!("`bind:{what}` zatím umí jen M104 proměnnou, ne výraz"), e.start, e.end)
-                    .with_help("bind:value={draft}"),
+                Diagnostic::new(format!("`bind:{what}` čeká proměnnou nebo její vlastnost"), e.start, e.end)
+                    .with_help("bind:value={draft} nebo bind:value={form.email}"),
             );
         }
     }
 
-    /// `{user}` jako zkratka za `user={user}`.
     fn shorthand_attr(&mut self, attrs: &mut Vec<Attr>) -> bool {
         let open = self.pos;
         let Some(close) = scan_braces(self.src.as_bytes(), open + 1, self.end) else {
@@ -510,8 +713,10 @@ impl Parser<'_, '_> {
         let inner = &self.src[open + 1..close];
         let name = inner.trim();
         self.pos = close + 1;
-        if name.starts_with("...") {
-            self.diags.push(Diagnostic::new("spread atributů {...x} zatím Slicer neumí", open, close + 1));
+        if let Some(spread) = name.strip_prefix("...") {
+            let at = open + 1 + inner.find("...").unwrap() + 3;
+            let id = self.add_expr(at, at + spread.len());
+            attrs.push(Attr { name: "...".into(), span: (open, close + 1), value: AttrValue::Spread(id) });
         } else if is_ident(name) {
             let lead = inner.len() - inner.trim_start().len();
             let id = self.add_expr(open + 1 + lead, open + 1 + lead + name.len());
@@ -572,14 +777,10 @@ impl Parser<'_, '_> {
             Some(Frame::Element { tag, attrs, children, .. }) if tag == name => {
                 self.push(Node::Element { tag, attrs, children });
             }
-            Some(Frame::Component { name: n, attrs, children, span }) if n == name => {
-                if children.iter().any(|c| !matches!(c, Node::Text(t) if t.trim().is_empty())) {
-                    self.diags.push(
-                        Diagnostic::new(format!("obsah uvnitř <{n}> (infill) zatím Slicer neumí"), span.0, span.1)
-                            .with_help(format!("zatím napiš <{n} />")),
-                    );
-                }
-                self.push(Node::Component { name: n, attrs, span });
+            Some(Frame::Component { name: n, attrs, children, named, span }) if n == name => {
+                let infill =
+                    if children.iter().all(|c| matches!(c, Node::Text(t) if t.trim().is_empty())) { Vec::new() } else { children };
+                self.push(Node::Component { name: n, attrs, span, infill, named });
             }
             Some(other) => {
                 let d = mismatch(&other, &format!("</{name}>"), name_span);
@@ -610,7 +811,6 @@ impl Parser<'_, '_> {
     fn text(&mut self) {
         let start = self.pos;
         let b = self.src.as_bytes();
-        // První znak bereme vždycky, jinak by se `<!DOCTYPE` nebo `< 5` zacyklily.
         self.pos += self.src[self.pos..].chars().next().map_or(1, char::len_utf8);
         while self.pos < self.end {
             let c = b[self.pos];
@@ -650,9 +850,62 @@ fn mismatch(open: &Frame, found: &str, at: (usize, usize)) -> Diagnostic {
             .with_help(format!("přidej (</each>) před {found}")),
         Frame::Component { name, .. } => Diagnostic::new(format!("tady čekám </{name}>, ne {found}"), at.0, at.1)
             .with_help(format!("<{name}> výš ještě není uzavřená")),
+        Frame::Infill { span, .. } => Diagnostic::new("(<infill>) není uzavřený", span.0, span.1)
+            .with_help(format!("přidej (</infill>) před {found}")),
+        Frame::Macro { span, .. } => Diagnostic::new("(<macro>) není uzavřené", span.0, span.1)
+            .with_help(format!("přidej (</macro>) před {found}")),
+        Frame::Portal { span, .. } => Diagnostic::new("(<portal>) není uzavřený", span.0, span.1)
+            .with_help(format!("přidej (</portal>) před {found}")),
+        Frame::Head { span, .. } => Diagnostic::new("(<head>) není uzavřený", span.0, span.1)
+            .with_help(format!("přidej (</head>) před {found}")),
+        Frame::Match { span, .. } => Diagnostic::new("(<match>) není uzavřený", span.0, span.1)
+            .with_help(format!("přidej (</match>) před {found}")),
         Frame::Later { name, .. } => Diagnostic::new(format!("tady čekám (</{name}>), ne {found}"), at.0, at.1),
         Frame::Root(_) => Diagnostic::new(format!("{found} nic neuzavírá"), at.0, at.1),
     }
+}
+
+fn strip_line_comment(s: &str) -> &str {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\'' | b'"' => i = skip_string(b, i, b.len()).unwrap_or(b.len()),
+            b'`' => i = skip_template(b, i, b.len()).unwrap_or(b.len()),
+            b'/' if b.get(i + 1) == Some(&b'/') => return &s[..i],
+            _ => {}
+        }
+        i += 1;
+    }
+    s
+}
+
+/// První `=` přiřazení (ne `==`, `=>`, `<=`, `>=`, `!=`) mimo závorky.
+fn find_assign(s: &str) -> Option<usize> {
+    let b = s.as_bytes();
+    let mut depth = 0i32;
+    for i in 0..b.len() {
+        match b[i] {
+            b'(' | b'[' | b'{' | b'<' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            b'>' if i > 0 && b[i - 1] != b'=' => depth -= 1,
+            b'=' if depth <= 0
+                && !matches!(b.get(i + 1), Some(b'=' | b'>'))
+                && !(i > 0 && matches!(b[i - 1], b'=' | b'!' | b'<' | b'>')) =>
+            {
+                return Some(i);
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// `x`, `form.email`, `rows[i].name`
+fn is_path(s: &str) -> bool {
+    let root_len = s.find(['.', '[']).unwrap_or(s.len());
+    is_ident(&s[..root_len])
+        && !s.contains(['(', ' ', '='])
 }
 
 fn is_ident(s: &str) -> bool {
@@ -663,7 +916,6 @@ fn is_ident(s: &str) -> bool {
 
 type Range = (usize, usize);
 
-/// `todo, i of todos by todo.id` → (položka, index, rozsah seznamu, rozsah klíče).
 fn parse_each_head(
     args: &str,
     start: usize,
@@ -681,14 +933,15 @@ fn parse_each_head(
 
     let mut names = Vec::new();
     let mut offset = 0;
-    for part in args[..of].split(',') {
+    for part in split_top_level(&args[..of]) {
         let name = part.trim();
         let pos = start + offset + (part.len() - part.trim_start().len());
         offset += part.len() + 1;
-        if !is_ident(name) {
-            let msg = if name.is_empty() { "tady chybí jméno položky" } else { "destrukturování v (<each>) zatím Slicer neumí" };
+        let pattern = names.is_empty() && (name.starts_with('{') || name.starts_with('['));
+        if !is_ident(name) && !pattern {
+            let msg = if name.is_empty() { "tady chybí jméno položky" } else { "položka musí být jméno nebo vzor { a, b }" };
             return Err(Diagnostic::new(msg, pos, pos + name.len().max(1))
-                .with_help("(<each> todo of todos by todo.id ), pak {todo.text}"));
+                .with_help("(<each> todo of todos by todo.id ) nebo (<each> { id, text } of todos by id )"));
         }
         names.push(Binding { name: name.to_string(), pos });
     }
@@ -702,7 +955,24 @@ fn parse_each_head(
     Ok((item, index, iter, key))
 }
 
-/// Pozice slova `word` mimo závorky a řetězce (první nebo poslední výskyt).
+fn split_top_level(s: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut depth, mut start) = (0i32, 0);
+    for (i, c) in s.bytes().enumerate() {
+        match c {
+            b'{' | b'[' | b'(' => depth += 1,
+            b'}' | b']' | b')' => depth -= 1,
+            b',' if depth == 0 => {
+                out.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(&s[start..]);
+    out
+}
+
 fn find_word(s: &str, word: &str, last: bool) -> Option<usize> {
     let b = s.as_bytes();
     let ident = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'$';
@@ -730,8 +1000,6 @@ fn find_word(s: &str, word: &str, last: bool) -> Option<usize> {
     found
 }
 
-/// Najde `}`, která uzavírá výraz začínající na `i` (za otevírací `{`).
-/// Zná řetězce, template literály s `${}` a komentáře.
 pub fn scan_braces(b: &[u8], mut i: usize, end: usize) -> Option<usize> {
     let mut depth = 0usize;
     while i < end {
@@ -828,21 +1096,16 @@ fn decode_entities(s: &str) -> String {
     out
 }
 
-/// Co se ze šablony dostalo do projekce.
 #[derive(Debug, Default)]
 pub struct Projected {
-    /// Rozsah každého výrazu v projekci.
     pub ranges: Vec<(usize, usize)>,
-    /// `bind:` setter `(__v) => { x = __v }` pro výraz s daným ID.
     pub setters: HashMap<ExprId, (usize, usize)>,
-    /// Pozice položek a indexů z `(<each>)` v projekci (jsou to signály).
-    pub each_items: Vec<usize>,
-    /// Komponenty použité v šabloně: jméno a pozice ve zdroji.
+    pub each_items: Vec<(usize, usize)>,
+    pub each_patterns: HashMap<usize, (usize, usize)>,
     pub components: Vec<(String, usize)>,
+    pub locals: Vec<usize>,
 }
 
-/// Výrazy ze šablony se přidají do projekce, aby je Oxc analyzoval ve stejném scope jako setup.
-/// `(<each>)` se promítne jako `for (const todo of …) { … }`, takže položka má vlastní scope.
 pub fn project(t: &Template, src: &str, p: &mut Projection) -> Projected {
     let mut out = Projected { ranges: vec![(0, 0); t.exprs.len()], ..Projected::default() };
     project_nodes(&t.nodes, t, src, p, &mut out);
@@ -860,7 +1123,21 @@ fn emit(id: ExprId, before: &str, after: &str, t: &Template, src: &str, p: &mut 
 
 fn project_attrs(attrs: &[Attr], t: &Template, src: &str, p: &mut Projection, out: &mut Projected) {
     for a in attrs {
-        let AttrValue::Expr(id) = a.value else { continue };
+        let id = match a.value {
+            AttrValue::Expr(id) => id,
+            AttrValue::Spread(id) => {
+                emit(id, "(", ");\n", t, src, p, out);
+                continue;
+            }
+            AttrValue::Use { action, params } => {
+                emit(action, "(", ");\n", t, src, p, out);
+                if let Some(id) = params {
+                    emit(id, "(", ");\n", t, src, p, out);
+                }
+                continue;
+            }
+            _ => continue,
+        };
         emit(id, "(", ");\n", t, src, p, out);
         if a.name.starts_with("bind:") {
             let e = t.exprs[id];
@@ -882,13 +1159,62 @@ fn project_nodes(nodes: &[Node], t: &Template, src: &str, p: &mut Projection, ou
                 project_attrs(attrs, t, src, p, out);
                 project_nodes(children, t, src, p, out);
             }
-            Node::Component { name, attrs, span } => {
+            Node::Component { name, attrs, span, infill, named } => {
                 out.components.push((name.clone(), span.0));
-                // Odkaz na komponentu, ať Oxc pozná, jestli je importovaná.
                 p.r#gen("(", span.0);
                 p.src(name, span.0);
                 p.r#gen(");\n", span.0);
                 project_attrs(attrs, t, src, p, out);
+                project_nodes(infill, t, src, p, out);
+                for (_, children) in named {
+                    project_nodes(children, t, src, p, out);
+                }
+            }
+            Node::Macro { name, params, children } => {
+                p.r#gen("function ", name.pos);
+                p.src(&name.name, name.pos);
+                p.r#gen("(", name.pos);
+                if let Some((s, e)) = params {
+                    p.src(&src[*s..*e], *s);
+                }
+                p.r#gen(") {\n", name.pos);
+                project_nodes(children, t, src, p, out);
+                p.r#gen("}\n", 0);
+            }
+            Node::Listen { attrs, .. } => project_attrs(attrs, t, src, p, out),
+            Node::Local { name, ty, expr } => {
+                p.r#gen("const ", name.pos);
+                out.locals.push(p.len());
+                p.src(&name.name, name.pos);
+                if let Some((s, e)) = ty {
+                    p.r#gen(": ", *s);
+                    p.src(&src[*s..*e], *s);
+                }
+                emit(*expr, " = (", "\n);\n", t, src, p, out);
+            }
+            Node::Head { children } => {
+                p.r#gen("{\n", 0);
+                project_nodes(children, t, src, p, out);
+                p.r#gen("}\n", 0);
+            }
+            Node::Portal { target, children } => {
+                if let Some(id) = target {
+                    emit(*id, "(", ");\n", t, src, p, out);
+                }
+                p.r#gen("{\n", 0);
+                project_nodes(children, t, src, p, out);
+                p.r#gen("}\n", 0);
+            }
+            Node::Match { subject, cases } => {
+                emit(*subject, "(", ");\n", t, src, p, out);
+                for (case, children) in cases {
+                    match case {
+                        Some(id) => emit(*id, "if (", ") {\n", t, src, p, out),
+                        None => p.r#gen("{\n", 0),
+                    }
+                    project_nodes(children, t, src, p, out);
+                    p.r#gen("}\n", 0);
+                }
             }
             Node::Expr(id) => emit(*id, "(", ");\n", t, src, p, out),
             Node::Text(_) => {}
@@ -906,11 +1232,15 @@ fn project_nodes(nodes: &[Node], t: &Template, src: &str, p: &mut Projection, ou
             Node::Each { head, children, empty } => {
                 let item = &head.item;
                 p.r#gen("for (const ", item.pos);
-                out.each_items.push(p.len());
+                let s = p.len();
                 p.src(&item.name, item.pos);
+                out.each_items.push((s, p.len()));
+                if !is_ident(&item.name) {
+                    out.each_patterns.insert(item.pos, (s, p.len()));
+                }
                 emit(head.iter, " of (", ")) {\n", t, src, p, out);
+                // Klíč dostává položku jako hodnotu: vlastní parametry ji zastíní.
                 if let Some(key) = head.key {
-                    // Klíč dostává položku jako obyčejnou hodnotu, ne signál: vlastní parametry ho zastíní.
                     let params = match &head.index {
                         Some(i) => format!("(({}, {}) => (", item.name, i.name),
                         None => format!("(({}) => (", item.name),
@@ -919,8 +1249,9 @@ fn project_nodes(nodes: &[Node], t: &Template, src: &str, p: &mut Projection, ou
                 }
                 if let Some(index) = &head.index {
                     p.r#gen("let ", index.pos);
-                    out.each_items.push(p.len());
+                    let s = p.len();
                     p.src(&index.name, index.pos);
+                    out.each_items.push((s, p.len()));
                     p.r#gen(" = 0;\n", index.pos);
                 }
                 project_nodes(children, t, src, p, out);
@@ -933,4 +1264,17 @@ fn project_nodes(nodes: &[Node], t: &Template, src: &str, p: &mut Projection, ou
             }
         }
     }
+}
+
+/// `<title>` z `(<head>)` zvlášť: titulek se nastavuje přes `document.title`, poslední vyhrává.
+pub fn split_title(children: &[Node]) -> (Option<Vec<&Node>>, Vec<&Node>) {
+    let mut title = None;
+    let mut rest = Vec::new();
+    for c in children {
+        match c {
+            Node::Element { tag, children, .. } if tag == "title" => title = Some(children.iter().collect()),
+            other => rest.push(other),
+        }
+    }
+    (title, rest)
 }

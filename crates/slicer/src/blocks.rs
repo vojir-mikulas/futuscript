@@ -1,5 +1,3 @@
-//! Rozdělení `.fs` souboru na top-level bloky.
-
 use crate::diagnostic::Diagnostic;
 use crate::instruction::{self, Kind};
 use crate::suggest;
@@ -12,9 +10,7 @@ pub const TOP: [&str; 4] = [HOST, SETUP, TEMPLATE, STYLE];
 
 #[derive(Debug, Clone, Copy)]
 pub struct Block {
-    /// Pozice jména v otevíracím tagu (pro chybové hlášky).
     pub name_span: (usize, usize),
-    /// Obsah mezi otevíracím a zavíracím řádkem.
     pub content: (usize, usize),
 }
 
@@ -51,7 +47,6 @@ pub fn split(src: &str, diags: &mut Vec<Diagnostic>) -> Blocks {
             && !t.starts_with("(</")
             && instruction::parse(t, start).is_ok_and(|i| TOP.contains(&i.name))
     };
-    // Soubor bez jediného bloku je celý šablona.
     if !lines.iter().any(|l| {
         let t = l.text.trim_start();
         is_top_open(t, l.start + l.text.len() - t.len())
@@ -75,7 +70,7 @@ pub fn split(src: &str, diags: &mut Vec<Diagnostic>) -> Blocks {
             if t.starts_with("(<") {
                 let Ok(instr) = instruction::parse(t, t_start) else { continue };
                 if !TOP.contains(&instr.name) {
-                    continue; // vnořené instrukce řeší šablona/setup
+                    continue;
                 }
                 if instr.kind == Kind::Close && instr.name == open.name {
                     *blocks.slot(open.name) =
@@ -99,7 +94,6 @@ pub fn split(src: &str, diags: &mut Vec<Diagnostic>) -> Blocks {
                         )
                         .with_help(format!("přidej (</{}>) před (<{}>)", open.name, instr.name)),
                     );
-                    // Pokračujeme, jako by tu nový blok začínal, ať najdeme další chyby.
                     current = start_block(&blocks, instr, line, diags);
                 }
             }

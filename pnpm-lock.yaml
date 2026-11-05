@@ -28,11 +28,36 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0(@types/node@24.19.2)(happy-dom@21.0.4)(vite@8.3.5(@types/node@24.19.2))
 
+  demo:
+    devDependencies:
+      '@futuscript/firmware':
+        specifier: workspace:*
+        version: link:../packages/firmware
+      '@futuscript/host':
+        specifier: workspace:*
+        version: link:../packages/host
+      '@futuscript/vite':
+        specifier: workspace:*
+        version: link:../packages/vite
+      vite:
+        specifier: ^8.3.5
+        version: 8.3.5(@types/node@24.19.2)
+
   packages/firmware: {}
+
+  packages/host:
+    dependencies:
+      '@futuscript/firmware':
+        specifier: workspace:*
+        version: link:../firmware
 
   packages/slicer: {}
 
   packages/vite:
+    dependencies:
+      '@futuscript/host':
+        specifier: workspace:*
+        version: link:../host
     devDependencies:
       '@types/node':
         specifier: ^24
@@ -42,6 +67,18 @@ importers:
         version: 8.3.5(@types/node@24.19.2)
 
   playground:
+    devDependencies:
+      '@futuscript/firmware':
+        specifier: workspace:*
+        version: link:../packages/firmware
+      '@futuscript/vite':
+        specifier: workspace:*
+        version: link:../packages/vite
+      vite:
+        specifier: ^8.3.5
+        version: 8.3.5(@types/node@24.19.2)
+
+  site:
     devDependencies:
       '@futuscript/firmware':
         specifier: workspace:*

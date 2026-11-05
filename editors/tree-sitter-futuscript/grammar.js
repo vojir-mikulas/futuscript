@@ -1,14 +1,3 @@
-/**
- * Tree-sitter gramatika pro Futuscript (`.fs`).
- *
- * Slouží pro zvýrazňování v editorech (Zed, Neovim, Helix). Párování tagů neověřuje,
- * to dělá Slicer. Kód v setupu a výrazy v šabloně se do TypeScriptu vkládají přes
- * injections, tady se jen vymezí jejich rozsah.
- */
-
-/// <reference types="tree-sitter-cli/dsl" />
-
-// Řádek, který nezačíná `(<` (to je instrukce nebo zavírací tag bloku).
 const LINE = /([^(\s]|\([^<\n])[^\n]*\n?/
 
 const BLOCKS = {
@@ -18,7 +7,6 @@ const BLOCKS = {
   style: 'filament',
 }
 
-// `(<extrusion>)` a `(</extrusion>)` jako jeden uzel block_start / block_end.
 const blockRules = Object.fromEntries(
   Object.entries(BLOCKS).flatMap(([key, name]) => [
     [`_${key}_start`, ($) => seq('(<', alias(name, $.block_name), '>', ')')],
@@ -45,14 +33,12 @@ module.exports = grammar({
     style_block: ($) => seq(blockStart($, 'style'), repeat($.css_line), blockEnd($, 'style')),
     ...blockRules,
 
-    // --- setup: TypeScript po řádcích, G-kódy na začátku řádku ---
     _code_line: ($) => choice($.gcode_line, $.code, $.instruction),
     gcode_line: ($) => prec.right(seq($.gcode, optional($.code))),
     gcode: ($) => token(prec(2, /:?[GM]\d+/)),
     code: ($) => token(LINE),
     css_line: ($) => token(LINE),
 
-    // --- instrukce: (<if> user ), (</if>), (<procedureDone> export </procedureDone>) ---
     instruction: ($) =>
       choice(
         seq(
@@ -66,7 +52,6 @@ module.exports = grammar({
       ),
     instruction_name: ($) => /[a-zA-Z][a-zA-Z0-9]*/,
 
-    // --- šablona ---
     _template_node: ($) =>
       choice($.start_tag, $.end_tag, $.comment, $.expression, $.instruction, $.gcode_line, $.text),
 
@@ -87,7 +72,6 @@ module.exports = grammar({
         seq("'", optional(alias(token.immediate(/[^']+/), $.attribute_value)), "'"),
       ),
 
-    // `{výraz}`, vnořené závorky se párují (objektové literály, šablonové řetězce s ${}).
     expression: ($) => seq('{', optional(alias($._balanced, $.expression_content)), '}'),
     _balanced: ($) => repeat1(choice(/[^{}]+/, seq('{', optional($._balanced), '}'))),
 

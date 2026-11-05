@@ -1,8 +1,3 @@
-//! Slicer: kompilátor Futuscriptu (`.fs` → JS).
-//!
-//! Pipeline: bloky → projekce setupu a šablony do TS → analýza scope přes Oxc →
-//! přepis na signály → codegen šablony → odstranění typů.
-
 mod blocks;
 mod codegen;
 mod css;
@@ -11,16 +6,17 @@ mod instruction;
 mod projection;
 mod rewrite;
 mod setup;
+mod ssr;
 mod suggest;
 mod template;
 
 pub use diagnostic::{Diagnostic, render};
 
 pub struct Options<'a> {
-    /// Jméno souboru pro hlášky, jméno komponenty a ID scoped CSS.
     pub filename: &'a str,
-    /// Dev build: `M117` zůstává jako `console.debug`.
     pub dev: bool,
+    /// Serverový výstup: komponenta zapisuje HTML do pole stringů.
+    pub server: bool,
 }
 
 pub fn slice(source: &str, opts: &Options) -> Result<String, Vec<Diagnostic>> {
@@ -58,28 +54,46 @@ pub fn slice(source: &str, opts: &Options) -> Result<String, Vec<Diagnostic>> {
     let apply = |&(s, e): &(usize, usize)| rewrite::apply(&proj.text, &rw.edits, s, e);
     let exprs: Vec<String> = tpl.ranges.iter().map(apply).collect();
     let setters = tpl.setters.iter().map(|(id, r)| (*id, apply(r))).collect();
+    let each_names: std::collections::HashMap<usize, Vec<String>> = tpl
+        .each_patterns
+        .iter()
+        .map(|(src_pos, (proj, _))| (*src_pos, rw.each_names.get(proj).cloned().unwrap_or_default()))
+        .collect();
 
     let style = blocks.style.map(|b| &source[b.content.0..b.content.1]).filter(|s| !s.trim().is_empty());
     let scope = style.map(|css| css::class_for(opts.filename, css));
-    let (template_ts, gen_diags) = codegen::Gen::new(scope.as_deref(), &exprs, &setters).root(&template.nodes);
-    if !gen_diags.is_empty() {
-        return Err(gen_diags);
-    }
+    let template_ts = if opts.server {
+        ssr::Ssr::new(scope.as_deref(), &exprs, &each_names, source).root(&template.nodes)
+    } else {
+        let (code, gen_diags) =
+            codegen::Gen::new(scope.as_deref(), &exprs, &setters, &each_names, source).root(&template.nodes);
+        if !gen_diags.is_empty() {
+            return Err(gen_diags);
+        }
+        code
+    };
 
-    let mut ts = String::from("import * as __f from \"@futuscript/firmware\";\n");
+    let (runtime, into) = if opts.server { ("@futuscript/firmware/server", "__out") } else { ("@futuscript/firmware", "__root") };
+    let mut ts = format!("import * as __f from \"{runtime}\";\n");
     for import in &rw.hoisted {
-        ts.push_str(import);
+        // Na serveru se i importované komponenty kompilují serverově.
+        let import = if opts.server { import.replace(".fs\"", ".fs?ssr\"").replace(".fs'", ".fs?ssr'") } else { import.clone() };
+        ts.push_str(&import);
         ts.push('\n');
     }
     if let (Some(css), Some(scope)) = (style, &scope) {
         let scoped = css::scope(css.trim(), scope);
         ts.push_str(&format!("__f.css({}, {});\n", codegen::js_str(scope), codegen::js_str(&scoped)));
     }
-    ts.push_str(&format!("export default function {}(__props: any = {{}}) {{\n", component_name(opts.filename)));
+    if !setup.pragmas.is_empty() {
+        let list: Vec<String> = setup.pragmas.iter().map(|p| codegen::js_str(p)).collect();
+        ts.push_str(&format!("export const procedureDone = [{}];\n", list.join(", ")));
+    }
+    ts.push_str(&format!("export default function {}(__props: any = {{}}, {into}: any) {{\n", component_name(opts.filename)));
     ts.push_str(&setup_ts);
-    ts.push_str("\nconst __root = __f.frag();\n");
+    ts.push('\n');
     ts.push_str(&template_ts);
-    ts.push_str("return __root;\n}\n");
+    ts.push_str("}\n");
 
     codegen::strip_types(&ts).map_err(|e| {
         vec![

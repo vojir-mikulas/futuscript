@@ -1,22 +1,18 @@
 ---
 source: crates/slicer/tests/slice.rs
-expression: "slice(src, &Options { filename: \"TodoItem.fs\", dev: true }).unwrap()"
+expression: "slice(src, &Options\n{ filename: \"TodoItem.fs\", dev: true, server: false }).unwrap()"
 ---
 import * as __f from "@futuscript/firmware";
 __f.css("f-g3hkdv", ".todo--done.f-g3hkdv { text-decoration: line-through; opacity: 0.6; }");
-export default function TodoItem(__props = {}) {
+export default function TodoItem(__props = {}, __root) {
 	const todo = __f.computed(() => __props.todo);
 	const ontoggle = __f.computed(() => __props.ontoggle);
-	const __root = __f.frag();
-	const __n1 = __f.el("label");
+	const __n1 = __f.el(__root, "label");
 	__f.cls(__n1, () => ["todo", todo.get().done && "todo--done"], "f-g3hkdv");
-	__root.append(__n1);
-	const __n2 = __f.el("input");
+	const __n2 = __f.el(__n1, "input");
+	__n2.setAttribute("class", "f-g3hkdv");
 	__n2.setAttribute("type", "checkbox");
 	__f.prop(__n2, "checked", () => todo.get().done);
 	__f.on(__n2, "change", () => ontoggle.get());
-	__n2.className = "f-g3hkdv";
-	__n1.append(__n2);
 	__f.insert(__n1, () => todo.get().text);
-	return __root;
 }

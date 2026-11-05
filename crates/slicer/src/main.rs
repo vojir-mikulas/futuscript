@@ -3,16 +3,17 @@ use std::process::ExitCode;
 
 use futuscript_slicer::{Options, render, slice};
 
-const USAGE: &str = "futu-slice <soubor.fs> [--prod]\nfutu-slice --stdin --filename <jméno.fs> [--prod]";
+const USAGE: &str = "futu-slice <soubor.fs> [--prod] [--server]\nfutu-slice --stdin --filename <jméno.fs> [--prod]";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
-    let (mut path, mut filename, mut stdin, mut dev) = (None, None, false, true);
+    let (mut path, mut filename, mut stdin, mut dev, mut server) = (None, None, false, true, false);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--stdin" => stdin = true,
             "--filename" => filename = args.next(),
             "--prod" => dev = false,
+            "--server" => server = true,
             "-h" | "--help" => {
                 println!("{USAGE}");
                 return ExitCode::SUCCESS;
@@ -43,7 +44,7 @@ fn main() -> ExitCode {
     };
 
     let name = filename.or(path).unwrap_or_else(|| "stdin.fs".into());
-    match slice(&source, &Options { filename: &name, dev }) {
+    match slice(&source, &Options { filename: &name, dev, server }) {
         Ok(js) => {
             print!("{js}");
             ExitCode::SUCCESS

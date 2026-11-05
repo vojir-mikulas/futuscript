@@ -287,6 +287,40 @@ Makro bez parametrů se vykreslí prostě jako `{infill}`. Makro s parametry se 
 
 ---
 
+### 4.6 Akce, refy, spread, portál, kontext
+
+```futu
+(<extruderInitialization>)
+  import { magnetic } from "./motion.ts"   // akce: (el, params) => cleanup
+  import { Theme } from "./theme.ts"       // export const Theme = context("light")
+
+  M98 ...rest                              // všechny props kromě pojmenovaných
+  let canvas: HTMLCanvasElement | null = null
+  M141 Theme = "dark"                      // poskytne kontext podstromu
+  M105 theme = Theme.use()                 // přečte kontext (reaktivně)
+(</extruderInitialization>)
+
+(<extrusion>)
+  <button class="btn" {...rest} use:magnetic={{ strength: 0.3 }}>Klik</button>
+  <canvas bind:this={canvas}></canvas>
+  <div style={{ color, "--size": "2px" }}></div>
+
+  (<portal> document.body )
+    <div class="modal">…</div>
+  (</portal>)
+
+  (<window> onkeydown={handleKey} </window>)
+(</extrusion>)
+```
+
+- `use:jméno={params}`: akce dostane element po vložení do DOM. Vrátí-li funkci (nebo `{ destroy }`),
+  zavolá se při zániku. Při změně parametrů se akce spustí znovu.
+- `bind:this={x}`: element hned po vytvoření, `null` po zániku. Funguje s `M104` i obyčejnou proměnnou.
+- `{...rest}` na elementu: atributy, `on*` funkce jako eventy, `style`. `class` ze spreadu se
+  **sloučí** s vlastní třídou elementu, takže `<Button class="extra" />` prostě funguje.
+- `style` bere string i objekt (camelCase i `--proměnné`).
+- SVG elementy (`<svg>` a vše uvnitř kromě `<foreignObject>`) se tvoří ve správném namespace.
+
 ## 5. `(<layer>)` — jedna hranice pro všechno asynchronní a rendering
 
 3D tiskárna tiskne **po vrstvách** a streaming SSR posílá HTML taky po vrstvách. Vrstva je

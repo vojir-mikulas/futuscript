@@ -1,4 +1,3 @@
-/// Nejbližší kandidát podle Levenshteinovy vzdálenosti, pokud je dost blízko.
 pub fn closest<'a>(input: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
     let max = (input.chars().count() / 3).max(2);
     candidates

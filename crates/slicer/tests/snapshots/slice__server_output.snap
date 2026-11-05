@@ -1,0 +1,89 @@
+---
+source: crates/slicer/tests/slice.rs
+expression: "slice(src, &Options { filename: \"Todo.fs\", dev: true, server: true }).unwrap()"
+---
+import * as __f from "@futuscript/firmware/server";
+import TodoItem from "./TodoItem.fs?ssr";
+import Beer from "./Beer.fs?ssr";
+__f.css("f-554ep1", "h1.f-554ep1 { font-family: \"Futura\", sans-serif; }\n  .active.f-554ep1 { text-decoration: underline; }");
+export default function Todo(__props = {}, __out) {
+	const title = __f.computed(() => __props.title ?? "Úkoly");
+	const todos = __f.signal([]);
+	const draft = __f.signal("");
+	const filter = __f.signal("all");
+	const visible = __f.computed(() => todos.get().filter((t) => filter.get() === "all" || filter.get() === "done" === t.done));
+	const left = __f.computed(() => todos.get().filter((t) => !t.done).length);
+	let nextId = 1;
+	function add(e) {
+		e.preventDefault();
+		if (!draft.get().trim()) return;
+		todos.set([...todos.get(), {
+			id: nextId++,
+			text: draft.get().trim(),
+			done: false
+		}]);
+		draft.set("");
+	}
+	function toggle(id) {
+		todos.set(todos.get().map((t) => t.id === id ? {
+			...t,
+			done: !t.done
+		} : t));
+	}
+	__out.push("<h1", " class=\"f-554ep1\"", ">");
+	__out.push(__f.text(title.get()));
+	__out.push(" (");
+	__out.push(__f.text(left.get()));
+	__out.push(")");
+	__out.push("</h1>");
+	__out.push("<form", " class=\"f-554ep1\"", ">");
+	__out.push("<input", " class=\"f-554ep1\"", __f.attr("value", draft.get()), " placeholder=\"Co je potřeba vytisknout?\"", ">");
+	__out.push("<button", " class=\"f-554ep1\"", ">");
+	__out.push("Přidat");
+	__out.push("</button>");
+	__out.push("</form>");
+	__out.push("<nav", " class=\"f-554ep1\"", ">");
+	{
+		let __any1 = false;
+		for (const [__i2, __v3] of __f.list([
+			"all",
+			"open",
+			"done"
+		])) {
+			__any1 = true;
+			const f = __f.value(__v3);
+			const __ix = __f.value(__i2);
+			__out.push("<!---->");
+			__out.push("<button", __f.attr("class", __f.clsx([{ active: filter.get() === f.get() }, "f-554ep1"]) || null), ">");
+			__out.push(__f.text(f.get()));
+			__out.push("</button>");
+			__out.push("<!---->");
+		}
+		__out.push("<!---->");
+	}
+	__out.push("</nav>");
+	{
+		let __any4 = false;
+		for (const [__i5, __v6] of __f.list(visible.get())) {
+			__any4 = true;
+			const todo = __f.value(__v6);
+			const __ix = __f.value(__i5);
+			__out.push("<!---->");
+			__f.component(__out, TodoItem, {
+				get "todo"() {
+					return todo.get();
+				},
+				get "ontoggle"() {
+					return (() => toggle(todo.get().id));
+				}
+			});
+			__out.push("<!---->");
+		}
+		if (!__any4) {
+			__out.push("<!---->");
+			__f.component(__out, Beer, {});
+			__out.push("<!---->");
+		}
+		__out.push("<!---->");
+	}
+}

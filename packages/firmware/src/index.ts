@@ -1,38 +1,48 @@
-/**
- * Firmware: klientský runtime Futuscriptu.
- * Viz docs/architecture-v0.md §2.
- */
 export {
   batch,
   computed,
+  context,
   effect,
   flushMount,
   getOwner,
   onCleanup,
   onDestroy,
+  provide,
   root,
   runWithOwner,
   signal,
+  mutate,
   untrack,
   update,
   userEffect,
 } from "./reactive.ts"
-export type { Computed, Owner, Signal } from "./reactive.ts"
+export type { Computed, Context, Owner, Signal } from "./reactive.ts"
 export {
   attr,
   bind,
+  bindGroup,
+  bindThis,
   branch,
   cls,
-  clsx,
   component,
   css,
   each,
   el,
   frag,
+  head,
+  heat,
   insert,
   on,
+  portal,
   print,
   prop,
+  spread,
+  style,
+  svg,
+  text,
   transition,
+  use,
 } from "./dom.ts"
-export type { Model } from "./dom.ts"
+export type { Action } from "./dom.ts"
+export { clsx, props, renderable, rest, toText } from "./shared.ts"
+export type { Macro, Model, Renderable } from "./shared.ts"

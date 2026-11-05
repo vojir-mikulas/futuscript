@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Zed načítá Tree-sitter gramatiky jen z git repozitáře (repository + rev).
-# Skript vygeneruje parser, zkopíruje gramatiku do pomocného repa v cache, commitne ji tam
-# (ne do repa projektu) a zapíše rev do extension.toml. Pouštěj po každé změně grammar.js.
+# Zed bere gramatiky jen z gitu: zkopíruje gramatiku do repa v cache, commitne tam a zapíše rev.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"

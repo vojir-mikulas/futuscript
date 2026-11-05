@@ -1,0 +1,8 @@
+---
+source: crates/slicer/tests/slice.rs
+expression: "err(\"(<extrusion>)\\n  <div>\\n    (<infill> header )\\n    (</infill>)\\n  </div>\\n(</extrusion>)\\n\")"
+---
+Spaghetti v Test.fs:3:7
+ 3 │     (<infill> header )
+   │       ^^^^^^ (<infill>) patří přímo dovnitř komponenty
+   = pomoc: <Card> (<infill> header ) … (</infill>) </Card>

@@ -1,0 +1,8 @@
+---
+source: crates/slicer/tests/slice.rs
+expression: "err(\"(<extruderInitialization>)\\n  M141 Theme\\n(</extruderInitialization>)\\n\")"
+---
+Spaghetti v Test.fs:2:3
+ 2 │   M141 Theme
+   │   ^^^^ M141 poskytuje kontext celému podstromu
+   = pomoc: M141 Theme = "dark"   (Theme = context("light") z .ts souboru), číst přes Theme.use()

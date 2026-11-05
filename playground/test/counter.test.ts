@@ -1,4 +1,3 @@
-// @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest"
 import { print } from "@futuscript/firmware"
 import Counter from "../../examples/Counter.fs"
@@ -28,12 +27,10 @@ describe("Counter.fs end-to-end (Slicer → Firmware → DOM)", () => {
     expect(plate.querySelectorAll("p")).toHaveLength(1)
     expect(button.hasAttribute("disabled")).toBe(true)
 
-    // scoped CSS: třída na elementech + <style> v head
     const scope = button.className
     expect(scope).toMatch(/^f-[0-9a-z]{6}$/)
     expect(document.head.querySelector(`style[data-futu="${scope}"]`)!.textContent).toContain(`button.${scope}`)
 
-    // M106 + M117: efekt běží po mountu a při každé změně
     await tick()
     expect(debug.mock.calls.map((c) => c[0])).toEqual(["count je 8", "count je 9", "count je 10"])
 

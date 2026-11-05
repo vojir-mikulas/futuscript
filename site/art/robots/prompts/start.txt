@@ -1,0 +1,10 @@
+Use your image generation tool to create ONE image, then save it as a PNG file at exactly this path:
+site/art/robots-v2/start.png
+
+The attached image is the reference. Draw the SAME original robot character: tall lanky proportions, worn olive-green and brass riveted steel torso with paint chips, round chest window with a mint-green filament spool, the small open printer mechanism below it, long ribbed hose arms with three-finger brass grippers, thin piston legs, heavy brass-capped boots, squat trapezoid head with the brass hotend nozzle on top and the side hose, two mismatched round camera-lens eyes with half-closed metal eyelids, grille mouth. Same personality: cocky, sarcastic, unimpressed, not cute. Same art style: 2D adult animated sci-fi sitcom cartoon, thick even dark outlines, flat colors with one shadow tone. No text, no letters, no numbers, no logos anywhere.
+
+Pose and props for this image: standing tall with a confident grin, giving a thumbs up with one gripper and holding a large wrench over its shoulder with the other, a beat-up open toolbox at its feet.
+
+Background: fully TRANSPARENT (alpha), no ground plane, no frame, no backdrop. Square 1024x1024, character centered with comfortable padding.
+
+Save only the final image to the path above. Do not modify any other files.

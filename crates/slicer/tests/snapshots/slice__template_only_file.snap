@@ -3,11 +3,8 @@ source: crates/slicer/tests/slice.rs
 expression: "ok(include_str!(\"../../../examples/Beer.fs\"))"
 ---
 import * as __f from "@futuscript/firmware";
-export default function Test(__props = {}) {
-	const __root = __f.frag();
-	const __n1 = __f.el("p");
-	__n1.className = "hint";
-	__root.append(__n1);
-	__n1.append("Hotovo. Jdi si pro pivo.");
-	return __root;
+export default function Test(__props = {}, __root) {
+	const __n1 = __f.el(__root, "p");
+	__n1.setAttribute("class", "hint");
+	__f.text(__n1, "Hotovo. Jdi si pro pivo.");
 }

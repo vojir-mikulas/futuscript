@@ -1,7 +1,3 @@
-// Externí scanner pro argumenty instrukcí: `(<if> fn(a) )` → argumenty jsou `fn(a) `.
-// Regexem to nejde (potřebujeme konec před POSLEDNÍ `)` na řádku), tak se díváme dopředu
-// a konec tokenu si značíme přes mark_end před každou `)` a před `</`.
-
 #include "tree_sitter/parser.h"
 
 #include <stdbool.h>
@@ -23,14 +19,15 @@ void tree_sitter_futuscript_external_scanner_deserialize(void *payload, const ch
 
 static bool is_space(int32_t c) { return c == ' ' || c == '\t'; }
 
+// Argumenty končí před POSLEDNÍ `)` na řádku nebo před `</`: konec si značíme mark_end a čteme dál.
 bool tree_sitter_futuscript_external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
   (void)payload;
   if (!valid_symbols[INSTRUCTION_ARGS]) return false;
   while (is_space(lexer->lookahead)) lexer->advance(lexer, true);
 
-  bool content = false;          // nějaký ne-bílý znak před aktuální pozicí
+  bool content = false;
   bool marked = false;
-  bool content_at_mark = false;  // obsah před poslední značkou konce
+  bool content_at_mark = false;
 
   while (lexer->lookahead != '\n' && lexer->lookahead != '\r' && !lexer->eof(lexer)) {
     int32_t c = lexer->lookahead;
@@ -47,7 +44,6 @@ bool tree_sitter_futuscript_external_scanner_scan(void *payload, TSLexer *lexer,
       bool before = content;
       lexer->advance(lexer, false);
       if (lexer->lookahead == '/') {
-        // `(<name> args </name>)`
         lexer->result_symbol = INSTRUCTION_ARGS;
         return before;
       }
